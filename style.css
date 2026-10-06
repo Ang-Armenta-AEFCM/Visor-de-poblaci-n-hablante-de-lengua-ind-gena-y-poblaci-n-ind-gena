@@ -28,3 +28,24 @@ body.dark-mode{--bg:#111827;--panel:#172033;--text:#e5edf7;--muted:#a8b6c8;--bor
 .panel select:focus,.panel input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(15,107,120,.12)}
 .download-button{width:100%;margin-top:10px}
 @media(max-width:800px){.legend{width:250px;max-height:55vh}.legend-body,.legend #legendBody{max-height:330px}}
+
+/* Ajuste final: selección de rangos en panel lateral y leyenda explicativa */
+.range-panel{background:linear-gradient(180deg,var(--panel),color-mix(in srgb,var(--soft) 38%,var(--panel)))}
+.panel-title-row{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.panel-title-row h2{margin-top:2px}
+.text-button{border:0;background:transparent;color:var(--accent);font-size:10px;font-weight:800;cursor:pointer;padding:4px 0}
+.text-button:hover{text-decoration:underline}
+.range-hint{margin:5px 0 9px}
+.range-selector{display:grid;gap:5px}
+.range-option{width:100%;border:1px solid var(--border);background:var(--panel);color:var(--text);padding:8px 9px;border-radius:9px;cursor:pointer;text-align:left;display:grid;grid-template-columns:18px 14px 1fr;align-items:center;gap:8px;font-size:11px;transition:.15s ease}
+.range-option:hover{border-color:color-mix(in srgb,var(--accent) 45%,var(--border));background:var(--soft)}
+.range-option.active{border-color:var(--accent);background:var(--soft);box-shadow:inset 3px 0 0 var(--accent)}
+.range-check{width:16px;height:16px;border:1px solid var(--border);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;background:var(--panel)}
+.range-option.active .range-check{background:var(--accent);border-color:var(--accent);color:#fff}
+.legend{width:260px}
+.legend-body,.legend #legendBody{max-height:none;overflow:visible}
+.legend-help{margin:0 0 8px;line-height:1.4}
+.legend-scale-note{margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:10px;color:var(--muted);line-height:1.35}
+.legend-row{font-size:11px}
+.legend-dot{flex:0 0 auto;width:14px;height:14px;border-width:2px}
+.leaflet-interactive{filter:drop-shadow(0 1px 1px rgba(15,23,42,.18))}

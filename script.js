@@ -21,6 +21,9 @@ let dark = false;
 let legendSelection = new Set();
 
 const map = L.map('map', {zoomControl: false, preferCanvas: true}).setView([19.35, -99.13], 10);
+map.createPane('schoolPane');
+map.getPane('schoolPane').style.zIndex = 560;
+const schoolRenderer = L.canvas({padding:0.5, pane:'schoolPane'});
 L.control.zoom({position: 'topleft'}).addTo(map);
 const schoolLayer = L.layerGroup().addTo(map);
 const alcaldiaLayer = L.layerGroup().addTo(map);
@@ -94,11 +97,11 @@ async function init(){
 document.addEventListener('DOMContentLoaded',init);
 
 function bindUI(){
-  ['fuenteIndicador','representacion'].forEach(id => $(id).addEventListener('change',()=>{
+  $('fuenteIndicador').addEventListener('change',()=>{
     legendSelection.clear();
     syncSourceUI();
     applyFilters(false);
-  }));
+  });
   ['grupoIndigena','filtroNivel','filtroSostenimiento','filtroTurno','filtroEstado'].forEach(id => $(id).addEventListener('change',()=>{
     syncSourceUI();
     applyFilters(false);
@@ -110,7 +113,6 @@ function bindUI(){
   $('btnLimpiar').addEventListener('click',()=>{
     $('fuenteIndicador').value='siieweb';
     $('grupoIndigena').value='';
-    $('representacion').value='cantidad';
     ['filtroAlcaldia','filtroNivel','filtroSostenimiento','filtroTurno','filtroEstado'].forEach(id=>$(id).value='');
     $('buscar').value='';
     legendSelection.clear();
@@ -132,6 +134,7 @@ function bindUI(){
   });
   $('closeDetail').addEventListener('click',closeDetail);
   $('downloadVisible').addEventListener('click',downloadVisibleCsv);
+  $('rangeClear').addEventListener('click',()=>{ legendSelection.clear(); renderMap(); updateStats(); renderRangeSelector(); });
   map.on('zoomend',renderMap);
   document.addEventListener('fullscreenchange',()=>setTimeout(()=>map.invalidateSize(),100));
 }
@@ -151,8 +154,7 @@ function syncSourceUI(){
   const isSi=$('fuenteIndicador').value==='siieweb';
   $('grupoIndigena').disabled=!isSi;
   $('grupoHint').style.opacity=isSi?'1':'.45';
-  if(!isSi){ $('grupoIndigena').value=''; $('representacion').value='cantidad'; }
-  $('representacion').disabled=!isSi;
+  if(!isSi){ $('grupoIndigena').value=''; }
   const groupActive=isSi && !!$('grupoIndigena').value;
   [...$('filtroEstado').options].forEach(o=>{
     if(['cero','sin'].includes(o.value)) o.disabled=groupActive;
@@ -213,6 +215,7 @@ function applyFilters(resetView=false){
   buildSites();
   updateStats();
   renderMap();
+  renderRangeSelector();
   renderLegend();
   if(resetView && alcaldiasGeo){
     const tmp=L.geoJSON(alcaldiasGeo); if(tmp.getBounds().isValid()) map.fitBounds(tmp.getBounds(),{padding:[10,10]});
@@ -228,7 +231,10 @@ function siteKey(b){
 }
 function buildSites(){
   siteByKey=new Map();
-  effectiveCcts().forEach(b=>{
+  // Se construyen los puntos a partir del resultado de los filtros generales.
+  // La selección de rangos se aplica después; usar effectiveCcts() aquí dejaba
+  // el mapa vacío en la primera carga porque visibleSites todavía no existía.
+  filteredCcts.forEach(b=>{
     const key=siteKey(b);
     if(!siteByKey.has(key)) siteByKey.set(key,{key,ccts:[],lat:b.lat,lon:b.lon,alcaldia:b.alcaldia});
     const s=siteByKey.get(key); s.ccts.push(b);
@@ -255,7 +261,7 @@ function drawAlcaldias(){
 
 function renderMap(){
   schoolLayer.clearLayers();
-  if(map.getZoom()<=10.5) drawSummaryBubbles(); else drawSiteMarkers();
+  drawSiteMarkers();
 }
 function drawSummaryBubbles(){
   const byAlc=new Map();
@@ -279,30 +285,16 @@ function siteMetricInfo(site){
   const matricula=vals.length?vals.reduce((a,b)=>a+b,0):null;
   return {hasRecord,value,matricula};
 }
-function displayedValue(info){
-  const representation=$('representacion').value;
-  return representation==='porcentaje' && info.matricula!==null && info.matricula>0 ? info.value/info.matricula*100 : info.value;
-}
+function displayedValue(info){ return info.value; }
 function legendCategories(){
-  const repr=$('representacion').value;
-  if(repr==='porcentaje') return [
-    {id:'sin',label:'Sin registro',color:'#ffffff',border:'#94a3b8',test:i=>!i.hasRecord},
-    {id:'cero',label:'Registro en cero',color:'#94a3b8',test:i=>i.hasRecord&&i.value===0},
-    {id:'sinmat',label:'Sin matrícula para calcular %',color:'#f59e0b',test:i=>i.hasRecord&&i.value>0&&(!i.matricula||i.matricula<=0)},
-    {id:'p01',label:'0.1–1%',color:'#bae6fd',test:i=>i.hasRecord&&i.value>0&&i.matricula>0&&displayedValue(i)<=1},
-    {id:'p13',label:'1.1–3%',color:'#38bdf8',test:i=>i.hasRecord&&i.matricula>0&&displayedValue(i)>1&&displayedValue(i)<=3},
-    {id:'p35',label:'3.1–5%',color:'#0284c7',test:i=>i.hasRecord&&i.matricula>0&&displayedValue(i)>3&&displayedValue(i)<=5},
-    {id:'p510',label:'5.1–10%',color:'#075985',test:i=>i.hasRecord&&i.matricula>0&&displayedValue(i)>5&&displayedValue(i)<=10},
-    {id:'p10',label:'>10%',color:'#4c1d95',test:i=>i.hasRecord&&i.matricula>0&&displayedValue(i)>10}
-  ];
   return [
-    {id:'sin',label:'Sin registro',color:'#ffffff',border:'#94a3b8',test:i=>!i.hasRecord},
-    {id:'cero',label:'Registro en cero',color:'#94a3b8',test:i=>i.hasRecord&&i.value===0},
-    {id:'q1',label:'1',color:'#bae6fd',test:i=>i.hasRecord&&i.value===1},
-    {id:'q25',label:'2–5',color:'#38bdf8',test:i=>i.hasRecord&&i.value>=2&&i.value<=5},
-    {id:'q610',label:'6–10',color:'#0284c7',test:i=>i.hasRecord&&i.value>=6&&i.value<=10},
-    {id:'q1125',label:'11–25',color:'#075985',test:i=>i.hasRecord&&i.value>=11&&i.value<=25},
-    {id:'qgt25',label:'>25',color:'#4c1d95',test:i=>i.hasRecord&&i.value>25}
+    {id:'sin',label:'Sin registro',color:'#ffffff',border:'#64748b',test:i=>!i.hasRecord},
+    {id:'cero',label:'Registro en cero',color:'#94a3b8',border:'#64748b',test:i=>i.hasRecord&&i.value===0},
+    {id:'q1',label:'1 estudiante',color:'#dbeafe',border:'#2563eb',test:i=>i.hasRecord&&i.value===1},
+    {id:'q25',label:'2–5 estudiantes',color:'#7dd3fc',border:'#0369a1',test:i=>i.hasRecord&&i.value>=2&&i.value<=5},
+    {id:'q610',label:'6–10 estudiantes',color:'#38bdf8',border:'#075985',test:i=>i.hasRecord&&i.value>=6&&i.value<=10},
+    {id:'q1125',label:'11–25 estudiantes',color:'#0284c7',border:'#0c4a6e',test:i=>i.hasRecord&&i.value>=11&&i.value<=25},
+    {id:'qgt25',label:'Más de 25 estudiantes',color:'#4c1d95',border:'#2e1065',test:i=>i.hasRecord&&i.value>25}
   ];
 }
 function legendCategoryForInfo(info){
@@ -328,7 +320,9 @@ function drawSiteMarkers(){
     const display=displayedValue(info);
     const cat=legendCategoryForInfo(info);
     const marker=L.circleMarker([lat,lon],{
-      radius:markerRadius(display),color:cat.border||'#fff',weight:info.hasRecord?1.8:2.2,fillColor:cat.color,fillOpacity:info.hasRecord?.92:.35
+      renderer:schoolRenderer, pane:'schoolPane',
+      radius:markerRadius(display), color:cat.border||'#334155', weight:2.2,
+      fillColor:cat.color, fillOpacity:info.hasRecord ? 0.94 : 0.78, opacity:1
     });
     marker.bindPopup(buildPopup(site),{maxWidth:380,minWidth:290,autoPan:true});
     marker.on('popupopen',()=>bindPopup(site,marker));
@@ -336,13 +330,10 @@ function drawSiteMarkers(){
   });
 }
 function markerRadius(v){
-  if(!v || v<=0) return 5.5;
-  return Math.max(6,Math.min(14,6+Math.log10(v+1)*4));
+  if(!v || v<=0) return 6.5;
+  return Math.max(7,Math.min(15,7+Math.log10(v+1)*3.8));
 }
-function metricColor(v,repr,raw,hasRecord=true){
-  const info={hasRecord,value:raw,matricula:repr==='porcentaje'&&v>0?raw/(v/100):null};
-  return legendCategoryForInfo(info).color;
-}
+function metricColor(v,repr,raw,hasRecord=true){ return legendCategoryForInfo({hasRecord,value:raw}).color; }
 
 
 function buildPopup(site){
@@ -354,7 +345,7 @@ function buildPopup(site){
   return `<div class="school-popup">
     <h3>${esc(first.nombre)}${site.ccts.length>1?` <small>+${site.ccts.length-1} CCT</small>`:''}</h3>
     <div class="popup-meta">${esc(first.alcaldia)} · ${esc(first.nivel)}<br>${site.ccts.map(x=>esc(x.cct)).join(' · ')}</div>
-    <div class="popup-metric"><span>${esc(metricLabel)}</span><br><strong>${info.hasRecord?val.toLocaleString('es-MX'):'Sin registro'}</strong>${source==='siieweb'&&info.hasRecord&&mat?` · ${fmtPct(val/mat*100)} de matrícula`:''}</div>
+    <div class="popup-metric"><span>${esc(metricLabel)}</span><br><strong>${info.hasRecord?val.toLocaleString('es-MX'):'Sin registro'}</strong></div>
     <button class="popup-open" type="button" data-open-detail>Abrir ficha</button>
   </div>`;
 }
@@ -398,7 +389,7 @@ function detailHtml(b){
       ${detailCell('Sostenimiento',b.sostenimiento)}${detailCell('Alcaldía',b.alcaldia)}${detailCell('Domicilio',b.domicilio||'Sin registro')}${detailCell('Localidad / colonia',b.localidad||b.colonia||'Sin registro')}
     </div></section>
     <section class="info-card"><h3>Número de estudiantes pertenecientes a un grupo indígena por CCT (SIIEWEB)</h3>
-      ${si.length?`<div class="detail-grid">${detailCell('Total pertenecientes',fmt(siTotal))}${detailCell('Matrícula total (SIIEWEB)',fmt(siMat))}${detailCell('% de matrícula',siMat?fmtPct(siTotal/siMat*100):'Sin registro')}${detailCell('Turno consultado',turno||'Todos')}</div>
+      ${si.length?`<div class="detail-grid">${detailCell('Total pertenecientes',fmt(siTotal))}${detailCell('Matrícula total (SIIEWEB)',fmt(siMat))}${detailCell('Turno consultado',turno||'Todos')}</div>
       <div class="group-list" style="margin-top:9px">${groups.length?groups.map(([g,v])=>`<span class="group-tag">${esc(g)}: ${v.toLocaleString('es-MX')}</span>`).join(''):'<span class="muted-box">Registro en cero: no hay grupo indígena con estudiantes reportados.</span>'}</div>`:'<p class="muted-box">Sin registro (SIIEWEB).</p>'}
       <p class="source-note">Fuente: SIIEWEB, actualización del 17 de julio de 2026.</p>
     </section>
@@ -425,7 +416,7 @@ function updateStats(){
   $('kpiMatricula').textContent=matricula.toLocaleString('es-MX');
   const withCoords=rows.filter(b=>Number.isFinite(b.lat)&&Number.isFinite(b.lon)).length;
   let note=`${withCoords.toLocaleString('es-MX')} CCT visibles en mapa; ${(rows.length-withCoords).toLocaleString('es-MX')} sin coordenadas.`;
-  if(legendSelection.size) note+=` Leyenda: ${legendSelection.size} rango(s) activo(s).`;
+  if(legendSelection.size) note+=` Rangos activos: ${legendSelection.size}.`;
   if(source==='siieweb'){
     const top=topGroup(rows,$('filtroTurno').value);
     if(top) note+=` Grupo con mayor registro: ${top[0]} (${top[1].toLocaleString('es-MX')}).`;
@@ -439,22 +430,24 @@ function topGroup(rows,turno){
   return [...totals.entries()].sort((a,b)=>b[1]-a[1])[0]||null;
 }
 
+function renderRangeSelector(){
+  const cats=legendCategories();
+  $('rangeSelector').innerHTML=cats.map(c=>`<button type="button" class="range-option ${legendSelection.has(c.id)?'active':''}" data-range-id="${c.id}"><span class="range-check">${legendSelection.has(c.id)?'✓':''}</span><span class="legend-dot" style="background:${c.color};border-color:${c.border}"></span><span>${c.label}</span></button>`).join('');
+  $('rangeSelector').querySelectorAll('[data-range-id]').forEach(btn=>btn.onclick=()=>{
+    const id=btn.dataset.rangeId;
+    if(legendSelection.has(id)) legendSelection.delete(id); else legendSelection.add(id);
+    renderMap(); updateStats(); renderRangeSelector();
+  });
+}
+
 function renderLegend(){
   const source=$('fuenteIndicador').value;
   const group=$('grupoIndigena').value;
   $('legendTitle').textContent=source==='siieweb'?(group?`${group} (SIIEWEB)`:'Pertenencia a grupo indígena (SIIEWEB)'):'Niños indígenas / hablantes (Estadística 911)';
   const cats=legendCategories();
-  $('legendBody').innerHTML=`<div class="legend-help">Selecciona uno o varios rangos para filtrar el mapa.</div>`+
-    cats.map(c=>`<button type="button" class="legend-row legend-option ${legendSelection.has(c.id)?'active':''}" data-legend-id="${c.id}"><span class="legend-check">${legendSelection.has(c.id)?'✓':''}</span><span class="legend-dot" style="background:${c.color};border-color:${c.border||'rgba(0,0,0,.18)'}"></span><span>${c.label}</span></button>`).join('')+
-    `<div class="legend-actions"><button type="button" data-legend-clear>Mostrar todos</button></div>`;
-  $('legendBody').querySelectorAll('[data-legend-id]').forEach(btn=>btn.onclick=()=>{
-    const id=btn.dataset.legendId;
-    if(legendSelection.has(id)) legendSelection.delete(id); else legendSelection.add(id);
-    renderMap(); updateStats(); renderLegend();
-  });
-  $('legendBody').querySelector('[data-legend-clear]').onclick=()=>{
-    legendSelection.clear(); renderMap(); updateStats(); renderLegend();
-  };
+  $('legendBody').innerHTML=`<div class="legend-help">La simbología representa el número de estudiantes registrado para el indicador seleccionado.</div>`+
+    cats.map(c=>`<div class="legend-row"><span class="legend-dot" style="background:${c.color};border-color:${c.border}"></span><span>${c.label}</span></div>`).join('')+
+    `<div class="legend-scale-note">El tamaño del punto aumenta con la cantidad de estudiantes.</div>`;
 }
 
 
