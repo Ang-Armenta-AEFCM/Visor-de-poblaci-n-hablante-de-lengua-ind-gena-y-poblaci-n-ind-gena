@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Visor de estudiantes pertenecientes a grupos indígenas y hablantes de lengua indígena en planteles educativos de la Ciudad de México.">
+  <title>Visor de población indígena en planteles educativos</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="style.css?v=20261006-1">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand-block">
+    <span class="eyebrow">Sistema de información geográfica</span>
+    <h1>Visor de población indígena en planteles educativos</h1>
+    <p>Pertenencia a grupo indígena (SIIEWEB) y niños indígenas o hablantes de alguna lengua indígena (Estadística 911).</p>
+  </div>
+  <nav><a href="estadisticas.html">Estadísticas generales</a></nav>
+</header>
+
+<main class="layout" id="layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-head">
+      <div><span class="panel-kicker">Herramientas</span><strong>Panel de consulta</strong></div>
+      <button id="toggleSidebar" class="icon-button" type="button" aria-label="Ocultar menú">‹</button>
+    </div>
+
+    <section class="panel">
+      <h2>Indicador</h2>
+      <label for="fuenteIndicador">Fuente / indicador</label>
+      <select id="fuenteIndicador">
+        <option value="siieweb">Pertenencia a grupo indígena (SIIEWEB)</option>
+        <option value="911">Niños indígenas o hablantes de lengua indígena (Estadística 911)</option>
+      </select>
+      <label for="grupoIndigena">Grupo indígena (SIIEWEB)</label>
+      <select id="grupoIndigena"><option value="">Todos los grupos</option></select>
+      <p id="grupoHint" class="hint">Al seleccionar un grupo, el mapa muestra únicamente CCT con al menos un estudiante registrado en ese grupo.</p>
+      <label for="representacion">Representación</label>
+      <select id="representacion">
+        <option value="cantidad">Cantidad de estudiantes</option>
+        <option value="porcentaje">% respecto a matrícula SIIEWEB</option>
+      </select>
+    </section>
+
+    <section class="panel">
+      <h2>Filtros</h2>
+      <label for="filtroAlcaldia">Alcaldía</label>
+      <select id="filtroAlcaldia"><option value="">Todas</option></select>
+      <label for="filtroNivel">Nivel educativo</label>
+      <select id="filtroNivel"><option value="">Todos</option></select>
+      <label for="filtroSostenimiento">Sostenimiento</label>
+      <select id="filtroSostenimiento"><option value="">Todos</option></select>
+      <label for="filtroTurno">Turno</label>
+      <select id="filtroTurno"><option value="">Todos</option></select>
+      <label for="filtroEstado">Estado del indicador</label>
+      <select id="filtroEstado">
+        <option value="">Todos</option>
+        <option value="casos">Con casos (&gt; 0)</option>
+        <option value="registro">Con registro</option>
+        <option value="cero">Con registro en cero</option>
+        <option value="sin">Sin registro</option>
+      </select>
+      <label for="buscar">Buscar CCT o nombre</label>
+      <input id="buscar" type="search" placeholder="Ej. 09DPR... o nombre del plantel">
+      <div class="buttons"><button id="btnLimpiar" class="secondary" type="button">Limpiar filtros</button></div>
+    </section>
+
+    <section class="panel compact">
+      <h2>Resumen visible</h2>
+      <div class="kpis">
+        <div><strong id="kpiCct">0</strong><span>CCT</span></div>
+        <div><strong id="kpiPlanteles">0</strong><span>Planteles / puntos</span></div>
+        <div><strong id="kpiIndicador">0</strong><span id="kpiIndicadorLabel">Estudiantes (SIIEWEB)</span></div>
+        <div><strong id="kpiMatricula">0</strong><span>Matrícula SIIEWEB</span></div>
+      </div>
+      <p id="summaryNote" class="summary-note"></p>
+      <button id="downloadVisible" class="download-button" type="button">Descargar CCT visibles (CSV)</button>
+    </section>
+
+    <section class="panel methodology">
+      <h2>Fuentes</h2>
+      <p><strong>Pertenencia indígena (SIIEWEB):</strong> “Número de estudiantes pertenecientes a un grupo indígena por CCT” (SIIEWEB, 17 de julio de 2026).</p>
+      <p><strong>Estadística 911:</strong> “Número de niños indígenas o hablantes de alguna lengua indígena” (Estadística 911). Esta fuente contiene preescolar, primaria y secundaria.</p>
+      <p><strong>Sin registro ≠ cero.</strong> Si el CCT no aparece en una fuente se muestra “Sin registro”; un valor 0 se conserva como registro en cero.</p>
+    </section>
+  </aside>
+
+  <button id="showSidebar" class="show-sidebar hidden" type="button">Menú</button>
+
+  <section class="maparea">
+    <div id="map"></div>
+    <div class="map-actions">
+      <button id="toggleDark" type="button" title="Cambiar mapa claro/oscuro">◐</button>
+      <button id="toggleFullscreen" type="button" title="Pantalla completa">⛶</button>
+    </div>
+    <div id="mapStatus" class="map-status">Cargando información…</div>
+    <div id="legend" class="legend">
+      <div class="legend-head"><strong id="legendTitle">Pertenencia a grupo indígena (SIIEWEB)</strong><button id="toggleLegend" type="button">−</button></div>
+      <div id="legendBody"></div>
+    </div>
+    <aside id="detailPanel" class="detail-panel" aria-hidden="true">
+      <button id="closeDetail" class="close" type="button">×</button>
+      <h2 id="detailTitle">Ficha del CCT</h2>
+      <div id="detailContent" class="detail-content"></div>
+    </aside>
+  </section>
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="script.js?v=20261006-1"></script>
+</body>
+</html>
