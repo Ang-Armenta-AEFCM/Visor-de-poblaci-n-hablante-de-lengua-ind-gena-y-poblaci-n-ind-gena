@@ -18,6 +18,7 @@ let filteredCcts = [];
 let visibleSites = [];
 let siteByKey = new Map();
 let dark = false;
+let legendSelection = new Set();
 
 const map = L.map('map', {zoomControl: false, preferCanvas: true}).setView([19.35, -99.13], 10);
 L.control.zoom({position: 'topleft'}).addTo(map);
@@ -69,7 +70,9 @@ async function init(){
     baseRows = base.registros || [];
     siRows = si.registros || [];
     source911Rows = s911.registros || [];
-    groupCatalog = si.grupos || [];
+    const groupTotals=new Map();
+    siRows.forEach(r=>Object.entries(r.grupos||{}).forEach(([g,v])=>groupTotals.set(g,(groupTotals.get(g)||0)+(n(v)||0))));
+    groupCatalog = (si.grupos || []).filter(g=>(groupTotals.get(g)||0)>0);
     alcaldiasGeo = alc;
     baseByCct = new Map(baseRows.map(r => [r.cct,r]));
     siByCct = indexRows(siRows);
@@ -91,10 +94,18 @@ async function init(){
 document.addEventListener('DOMContentLoaded',init);
 
 function bindUI(){
-  ['fuenteIndicador','grupoIndigena','representacion','filtroAlcaldia','filtroNivel','filtroSostenimiento','filtroTurno','filtroEstado'].forEach(id => $(id).addEventListener('change',()=>{
+  ['fuenteIndicador','representacion'].forEach(id => $(id).addEventListener('change',()=>{
+    legendSelection.clear();
     syncSourceUI();
     applyFilters(false);
   }));
+  ['grupoIndigena','filtroNivel','filtroSostenimiento','filtroTurno','filtroEstado'].forEach(id => $(id).addEventListener('change',()=>{
+    syncSourceUI();
+    applyFilters(false);
+  }));
+  $('filtroAlcaldia').addEventListener('change',()=>{
+    syncSourceUI(); applyFilters(false); fitFilteredBounds();
+  });
   $('buscar').addEventListener('input',()=>applyFilters(false));
   $('btnLimpiar').addEventListener('click',()=>{
     $('fuenteIndicador').value='siieweb';
@@ -102,6 +113,7 @@ function bindUI(){
     $('representacion').value='cantidad';
     ['filtroAlcaldia','filtroNivel','filtroSostenimiento','filtroTurno','filtroEstado'].forEach(id=>$(id).value='');
     $('buscar').value='';
+    legendSelection.clear();
     syncSourceUI(); applyFilters(true);
   });
   $('toggleDark').addEventListener('click',toggleTheme);
@@ -141,7 +153,12 @@ function syncSourceUI(){
   $('grupoHint').style.opacity=isSi?'1':'.45';
   if(!isSi){ $('grupoIndigena').value=''; $('representacion').value='cantidad'; }
   $('representacion').disabled=!isSi;
-  $('kpiIndicadorLabel').textContent=isSi?'Estudiantes (SIIEWEB)':'Niños indígenas / hablantes (911)';
+  const groupActive=isSi && !!$('grupoIndigena').value;
+  [...$('filtroEstado').options].forEach(o=>{
+    if(['cero','sin'].includes(o.value)) o.disabled=groupActive;
+  });
+  if(groupActive && ['cero','sin'].includes($('filtroEstado').value)) $('filtroEstado').value='casos';
+  $('kpiIndicadorLabel').textContent=isSi?'Pertenecientes (SIIEWEB)':'Niños indígenas / hablantes (911)';
 }
 
 function sourceRowsFor(cct,source,turno){
@@ -151,20 +168,21 @@ function sourceRowsFor(cct,source,turno){
 }
 function metricFor(base,source,turno,group){
   const rows=sourceRowsFor(base.cct,source,turno);
-  const hasRecord=rows.length>0;
+  const indicatorRows=source==='siieweb'?rows.filter(r=>!r.fallback_matricula):rows;
+  const hasRecord=indicatorRows.length>0;
   let value=0;
   let matricula=null;
   if(source==='siieweb'){
-    rows.forEach(r=>{
+    indicatorRows.forEach(r=>{
       if(group) value += n(r.grupos?.[group]) || 0;
       else value += n(r.total_pertenecientes) || 0;
     });
     const mvals=rows.map(r=>n(r.matricula)).filter(v=>v!==null);
     matricula=mvals.length?mvals.reduce((a,b)=>a+b,0):null;
   }else{
-    rows.forEach(r=>value += n(r.total)||0);
+    indicatorRows.forEach(r=>value += n(r.total)||0);
   }
-  return {rows,hasRecord,value,matricula};
+  return {rows:indicatorRows,allRows:rows,hasRecord,value,matricula};
 }
 
 function applyFilters(resetView=false){
@@ -204,18 +222,25 @@ function applyFilters(resetView=false){
 function siteKey(b){
   if(b.inmueble) return `I:${b.inmueble}`;
   if(b.op_asig) return `O:${b.op_asig}`;
-  if(Number.isFinite(b.lat)&&Number.isFinite(b.lon)) return `C:${b.lat.toFixed(6)}|${b.lon.toFixed(6)}`;
+  // Sin identificador de inmueble no se agrupa solo por coordenada: dos planteles distintos
+  // pueden compartir el mismo punto y deben seguir siendo seleccionables por separado.
   return `N:${b.cct}`;
 }
 function buildSites(){
   siteByKey=new Map();
-  filteredCcts.forEach(b=>{
+  effectiveCcts().forEach(b=>{
     const key=siteKey(b);
     if(!siteByKey.has(key)) siteByKey.set(key,{key,ccts:[],lat:b.lat,lon:b.lon,alcaldia:b.alcaldia});
     const s=siteByKey.get(key); s.ccts.push(b);
     if((s.lat===null||s.lat===undefined) && Number.isFinite(b.lat)) {s.lat=b.lat;s.lon=b.lon;}
   });
   visibleSites=[...siteByKey.values()];
+}
+function fitFilteredBounds(){
+  const pts=effectiveSites().filter(s=>Number.isFinite(s.lat)&&Number.isFinite(s.lon)).map(s=>[s.lat,s.lon]);
+  if(!pts.length) return;
+  if(pts.length===1) map.setView(pts[0],15);
+  else map.fitBounds(L.latLngBounds(pts),{padding:[35,35],maxZoom:15});
 }
 
 function drawAlcaldias(){
@@ -234,39 +259,76 @@ function renderMap(){
 }
 function drawSummaryBubbles(){
   const byAlc=new Map();
-  filteredCcts.filter(b=>Number.isFinite(b.lat)&&Number.isFinite(b.lon)).forEach(b=>{
-    const k=b.alcaldia||'Sin registro';
-    if(!byAlc.has(k)) byAlc.set(k,{rows:[],lat:0,lon:0});
-    const a=byAlc.get(k); a.rows.push(b); a.lat+=b.lat; a.lon+=b.lon;
+  effectiveSites().filter(s=>Number.isFinite(s.lat)&&Number.isFinite(s.lon)).forEach(site=>{
+    const k=site.alcaldia||'Sin registro';
+    if(!byAlc.has(k)) byAlc.set(k,{rows:[],sites:[],lat:0,lon:0});
+    const a=byAlc.get(k); a.sites.push(site); a.rows.push(...site.ccts); a.lat+=site.lat; a.lon+=site.lon;
   });
   byAlc.forEach((a,name)=>{
-    const count=a.rows.length, lat=a.lat/count, lon=a.lon/count;
+    const count=a.rows.length, siteCount=a.sites.length, lat=a.lat/siteCount, lon=a.lon/siteCount;
     const metric=a.rows.reduce((s,b)=>s+(b.__metric?.value||0),0);
     const size=Math.max(36,Math.min(70,34+Math.log10(count+1)*16));
     const icon=L.divIcon({className:'',html:`<div class="summary-bubble" style="width:${size}px;height:${size}px">${count.toLocaleString('es-MX')}</div>`,iconSize:[size,size]});
     L.marker([lat,lon],{icon}).bindTooltip(`<strong>${esc(name)}</strong><br>${count.toLocaleString('es-MX')} CCT<br>Indicador: ${metric.toLocaleString('es-MX')}`).on('click',()=>map.setView([lat,lon],12)).addTo(schoolLayer);
   });
 }
-function siteMetric(site){return site.ccts.reduce((s,b)=>s+(b.__metric?.value||0),0)}
-function siteMatricula(site){
+function siteMetricInfo(site){
+  const hasRecord=site.ccts.some(b=>b.__metric?.hasRecord);
+  const value=site.ccts.reduce((s,b)=>s+(b.__metric?.value||0),0);
   const vals=site.ccts.map(b=>b.__metric?.matricula).filter(v=>v!==null&&v!==undefined);
-  return vals.length?vals.reduce((a,b)=>a+b,0):null;
+  const matricula=vals.length?vals.reduce((a,b)=>a+b,0):null;
+  return {hasRecord,value,matricula};
 }
+function displayedValue(info){
+  const representation=$('representacion').value;
+  return representation==='porcentaje' && info.matricula!==null && info.matricula>0 ? info.value/info.matricula*100 : info.value;
+}
+function legendCategories(){
+  const repr=$('representacion').value;
+  if(repr==='porcentaje') return [
+    {id:'sin',label:'Sin registro',color:'#ffffff',border:'#94a3b8',test:i=>!i.hasRecord},
+    {id:'cero',label:'Registro en cero',color:'#94a3b8',test:i=>i.hasRecord&&i.value===0},
+    {id:'sinmat',label:'Sin matrícula para calcular %',color:'#f59e0b',test:i=>i.hasRecord&&i.value>0&&(!i.matricula||i.matricula<=0)},
+    {id:'p01',label:'0.1–1%',color:'#bae6fd',test:i=>i.hasRecord&&i.value>0&&i.matricula>0&&displayedValue(i)<=1},
+    {id:'p13',label:'1.1–3%',color:'#38bdf8',test:i=>i.hasRecord&&i.matricula>0&&displayedValue(i)>1&&displayedValue(i)<=3},
+    {id:'p35',label:'3.1–5%',color:'#0284c7',test:i=>i.hasRecord&&i.matricula>0&&displayedValue(i)>3&&displayedValue(i)<=5},
+    {id:'p510',label:'5.1–10%',color:'#075985',test:i=>i.hasRecord&&i.matricula>0&&displayedValue(i)>5&&displayedValue(i)<=10},
+    {id:'p10',label:'>10%',color:'#4c1d95',test:i=>i.hasRecord&&i.matricula>0&&displayedValue(i)>10}
+  ];
+  return [
+    {id:'sin',label:'Sin registro',color:'#ffffff',border:'#94a3b8',test:i=>!i.hasRecord},
+    {id:'cero',label:'Registro en cero',color:'#94a3b8',test:i=>i.hasRecord&&i.value===0},
+    {id:'q1',label:'1',color:'#bae6fd',test:i=>i.hasRecord&&i.value===1},
+    {id:'q25',label:'2–5',color:'#38bdf8',test:i=>i.hasRecord&&i.value>=2&&i.value<=5},
+    {id:'q610',label:'6–10',color:'#0284c7',test:i=>i.hasRecord&&i.value>=6&&i.value<=10},
+    {id:'q1125',label:'11–25',color:'#075985',test:i=>i.hasRecord&&i.value>=11&&i.value<=25},
+    {id:'qgt25',label:'>25',color:'#4c1d95',test:i=>i.hasRecord&&i.value>25}
+  ];
+}
+function legendCategoryForInfo(info){
+  return legendCategories().find(c=>c.test(info)) || legendCategories()[0];
+}
+function sitePassesLegend(site){
+  if(!legendSelection.size) return true;
+  return legendSelection.has(legendCategoryForInfo(siteMetricInfo(site)).id);
+}
+function effectiveSites(){ return visibleSites.filter(sitePassesLegend); }
+function effectiveCcts(){ return effectiveSites().flatMap(s=>s.ccts); }
 function drawSiteMarkers(){
   const coordGroups=new Map();
-  visibleSites.filter(s=>Number.isFinite(s.lat)&&Number.isFinite(s.lon)).forEach(s=>{
+  effectiveSites().filter(s=>Number.isFinite(s.lat)&&Number.isFinite(s.lon)).forEach(s=>{
     const k=`${s.lat.toFixed(7)}|${s.lon.toFixed(7)}`;
     if(!coordGroups.has(k)) coordGroups.set(k,[]); coordGroups.get(k).push(s);
   });
-  visibleSites.filter(s=>Number.isFinite(s.lat)&&Number.isFinite(s.lon)).forEach(site=>{
+  effectiveSites().filter(s=>Number.isFinite(s.lat)&&Number.isFinite(s.lon)).forEach(site=>{
     const group=coordGroups.get(`${site.lat.toFixed(7)}|${site.lon.toFixed(7)}`);
     const idx=group.indexOf(site), angle=2*Math.PI*idx/group.length, radius=group.length>1?0.00007:0;
     const lat=site.lat+Math.sin(angle)*radius, lon=site.lon+Math.cos(angle)*radius;
-    const metric=siteMetric(site), matricula=siteMatricula(site);
-    const representation=$('representacion').value;
-    const display=representation==='porcentaje' && matricula?metric/matricula*100:metric;
+    const info=siteMetricInfo(site);
+    const display=displayedValue(info);
+    const cat=legendCategoryForInfo(info);
     const marker=L.circleMarker([lat,lon],{
-      radius:markerRadius(display),color:'#fff',weight:1.8,fillColor:metricColor(display,representation,metric),fillOpacity:.92
+      radius:markerRadius(display),color:cat.border||'#fff',weight:info.hasRecord?1.8:2.2,fillColor:cat.color,fillOpacity:info.hasRecord?.92:.35
     });
     marker.bindPopup(buildPopup(site),{maxWidth:380,minWidth:290,autoPan:true});
     marker.on('popupopen',()=>bindPopup(site,marker));
@@ -277,23 +339,22 @@ function markerRadius(v){
   if(!v || v<=0) return 5.5;
   return Math.max(6,Math.min(14,6+Math.log10(v+1)*4));
 }
-function metricColor(v,repr,raw){
-  if(raw===0) return '#94a3b8';
-  const breaks=repr==='porcentaje'?[1,3,5,10]:[1,5,10,25];
-  const colors=['#bae6fd','#38bdf8','#0284c7','#075985','#4c1d95'];
-  let i=0; while(i<breaks.length && v>breaks[i]) i++; return colors[i];
+function metricColor(v,repr,raw,hasRecord=true){
+  const info={hasRecord,value:raw,matricula:repr==='porcentaje'&&v>0?raw/(v/100):null};
+  return legendCategoryForInfo(info).color;
 }
+
 
 function buildPopup(site){
   const first=site.ccts[0];
   const source=$('fuenteIndicador').value;
   const group=$('grupoIndigena').value;
-  const val=siteMetric(site); const mat=siteMatricula(site);
-  const metricLabel=source==='siieweb'?(group?`${group} (SIIEWEB)`:'Pertenencia a grupo indígena (SIIEWEB)'):'Niños indígenas o hablantes de lengua indígena (Estadística 911)';
+  const info=siteMetricInfo(site); const val=info.value; const mat=info.matricula;
+  const metricLabel=source==='siieweb'?(group?`${group} (SIIEWEB)`:'Número de estudiantes pertenecientes a un grupo indígena por CCT (SIIEWEB)'):'Número de niños indígenas o hablantes de alguna lengua indígena (Estadística 911)';
   return `<div class="school-popup">
     <h3>${esc(first.nombre)}${site.ccts.length>1?` <small>+${site.ccts.length-1} CCT</small>`:''}</h3>
     <div class="popup-meta">${esc(first.alcaldia)} · ${esc(first.nivel)}<br>${site.ccts.map(x=>esc(x.cct)).join(' · ')}</div>
-    <div class="popup-metric"><span>${esc(metricLabel)}</span><br><strong>${val.toLocaleString('es-MX')}</strong>${source==='siieweb'&&mat?` · ${fmtPct(val/mat*100)} de matrícula`:''}</div>
+    <div class="popup-metric"><span>${esc(metricLabel)}</span><br><strong>${info.hasRecord?val.toLocaleString('es-MX'):'Sin registro'}</strong>${source==='siieweb'&&info.hasRecord&&mat?` · ${fmtPct(val/mat*100)} de matrícula`:''}</div>
     <button class="popup-open" type="button" data-open-detail>Abrir ficha</button>
   </div>`;
 }
@@ -321,10 +382,11 @@ function closeDetail(){ $('detailPanel').classList.remove('open'); $('detailPane
 
 function detailHtml(b){
   const turno=$('filtroTurno').value;
-  const si=sourceRowsFor(b.cct,'siieweb',turno);
+  const siAll=sourceRowsFor(b.cct,'siieweb',turno);
+  const si=siAll.filter(r=>!r.fallback_matricula);
   const s911=sourceRowsFor(b.cct,'911',turno);
   const siTotal=si.length?si.reduce((s,r)=>s+(n(r.total_pertenecientes)||0),0):null;
-  const siMatVals=si.map(r=>n(r.matricula)).filter(v=>v!==null); const siMat=siMatVals.length?siMatVals.reduce((a,b)=>a+b,0):null;
+  const siMatVals=siAll.map(r=>n(r.matricula)).filter(v=>v!==null); const siMat=siMatVals.length?siMatVals.reduce((a,b)=>a+b,0):null;
   const groupTotals=new Map(); si.forEach(r=>Object.entries(r.grupos||{}).forEach(([g,v])=>groupTotals.set(g,(groupTotals.get(g)||0)+(n(v)||0))));
   const groups=[...groupTotals.entries()].filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
   const h=s911.length?s911.reduce((s,r)=>s+(n(r.hombres)||0),0):null;
@@ -350,20 +412,22 @@ function detailCell(label,value){return `<div><span>${esc(label)}</span><strong>
 function updateStats(){
   const source=$('fuenteIndicador').value;
   const group=$('grupoIndigena').value;
-  const metric=filteredCcts.reduce((s,b)=>s+(b.__metric?.value||0),0);
-  const sites=visibleSites.filter(s=>Number.isFinite(s.lat)&&Number.isFinite(s.lon)).length;
-  const matricula=filteredCcts.reduce((s,b)=>{
-    const rows=sourceRowsFor(b.cct,'siieweb',$('filtroTurno').value);
-    const vals=rows.map(r=>n(r.matricula)).filter(v=>v!==null); return s+(vals.length?vals.reduce((a,c)=>a+c,0):0);
+  const rows=effectiveCcts();
+  const metric=rows.reduce((s,b)=>s+(b.__metric?.value||0),0);
+  const sites=effectiveSites().filter(s=>Number.isFinite(s.lat)&&Number.isFinite(s.lon)).length;
+  const matricula=rows.reduce((s,b)=>{
+    const rs=sourceRowsFor(b.cct,'siieweb',$('filtroTurno').value);
+    const vals=rs.map(r=>n(r.matricula)).filter(v=>v!==null); return s+(vals.length?vals.reduce((a,c)=>a+c,0):0);
   },0);
-  $('kpiCct').textContent=filteredCcts.length.toLocaleString('es-MX');
+  $('kpiCct').textContent=rows.length.toLocaleString('es-MX');
   $('kpiPlanteles').textContent=sites.toLocaleString('es-MX');
   $('kpiIndicador').textContent=metric.toLocaleString('es-MX');
   $('kpiMatricula').textContent=matricula.toLocaleString('es-MX');
-  const withCoords=filteredCcts.filter(b=>Number.isFinite(b.lat)&&Number.isFinite(b.lon)).length;
-  let note=`${withCoords.toLocaleString('es-MX')} CCT visibles en mapa; ${(filteredCcts.length-withCoords).toLocaleString('es-MX')} sin coordenadas.`;
+  const withCoords=rows.filter(b=>Number.isFinite(b.lat)&&Number.isFinite(b.lon)).length;
+  let note=`${withCoords.toLocaleString('es-MX')} CCT visibles en mapa; ${(rows.length-withCoords).toLocaleString('es-MX')} sin coordenadas.`;
+  if(legendSelection.size) note+=` Leyenda: ${legendSelection.size} rango(s) activo(s).`;
   if(source==='siieweb'){
-    const top=topGroup(filteredCcts,$('filtroTurno').value);
+    const top=topGroup(rows,$('filtroTurno').value);
     if(top) note+=` Grupo con mayor registro: ${top[0]} (${top[1].toLocaleString('es-MX')}).`;
     if(group) note+=` Filtro activo: ${group}.`;
   }
@@ -376,14 +440,23 @@ function topGroup(rows,turno){
 }
 
 function renderLegend(){
-  const source=$('fuenteIndicador').value, repr=$('representacion').value;
+  const source=$('fuenteIndicador').value;
   const group=$('grupoIndigena').value;
   $('legendTitle').textContent=source==='siieweb'?(group?`${group} (SIIEWEB)`:'Pertenencia a grupo indígena (SIIEWEB)'):'Niños indígenas / hablantes (Estadística 911)';
-  const labels=repr==='porcentaje'?['0','0.1–1%','1.1–3%','3.1–5%','5.1–10%','>10%']:['0','1','2–5','6–10','11–25','>25'];
-  const values=repr==='porcentaje'?[0,.5,2,4,8,12]:[0,1,3,8,18,30];
-  $('legendBody').innerHTML=labels.map((l,i)=>`<div class="legend-row"><span class="legend-dot" style="background:${metricColor(values[i],repr,values[i])}"></span><span>${l}</span></div>`).join('')+
-    `<div class="legend-row"><span class="legend-dot" style="background:#94a3b8"></span><span>Registro en cero</span></div><p class="hint">“Sin registro” se conserva como dato faltante y puede filtrarse desde el panel.</p>`;
+  const cats=legendCategories();
+  $('legendBody').innerHTML=`<div class="legend-help">Selecciona uno o varios rangos para filtrar el mapa.</div>`+
+    cats.map(c=>`<button type="button" class="legend-row legend-option ${legendSelection.has(c.id)?'active':''}" data-legend-id="${c.id}"><span class="legend-check">${legendSelection.has(c.id)?'✓':''}</span><span class="legend-dot" style="background:${c.color};border-color:${c.border||'rgba(0,0,0,.18)'}"></span><span>${c.label}</span></button>`).join('')+
+    `<div class="legend-actions"><button type="button" data-legend-clear>Mostrar todos</button></div>`;
+  $('legendBody').querySelectorAll('[data-legend-id]').forEach(btn=>btn.onclick=()=>{
+    const id=btn.dataset.legendId;
+    if(legendSelection.has(id)) legendSelection.delete(id); else legendSelection.add(id);
+    renderMap(); updateStats(); renderLegend();
+  });
+  $('legendBody').querySelector('[data-legend-clear]').onclick=()=>{
+    legendSelection.clear(); renderMap(); updateStats(); renderLegend();
+  };
 }
+
 
 function toggleTheme(){
   dark=!dark; document.body.classList.toggle('dark-mode',dark);
@@ -402,7 +475,7 @@ function setStatus(text,error=false){
 function downloadVisibleCsv(){
   const source=$('fuenteIndicador').value; const group=$('grupoIndigena').value; const turno=$('filtroTurno').value;
   const rows=[['CCT','Nombre','Nivel','Alcaldía','Sostenimiento','Turnos','Latitud','Longitud','Indicador','Valor','Matrícula SIIEWEB','Fuente']];
-  filteredCcts.forEach(b=>{
+  effectiveCcts().forEach(b=>{
     const m=metricFor(b,source,turno,group);
     rows.push([b.cct,b.nombre,b.nivel,b.alcaldia,b.sostenimiento,(b.turnos||[]).join(' / '),b.lat??'',b.lon??'',source==='siieweb'?(group||'Pertenencia a grupo indígena'):'Niños indígenas o hablantes de lengua indígena',m.hasRecord?m.value:'Sin registro',m.matricula??'',source==='siieweb'?'SIIEWEB':'Estadística 911']);
   });

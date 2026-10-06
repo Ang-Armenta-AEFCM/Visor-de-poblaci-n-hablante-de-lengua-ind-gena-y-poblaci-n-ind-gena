@@ -11,3 +11,20 @@ body.dark-mode{--bg:#111827;--panel:#172033;--text:#e5edf7;--muted:#a8b6c8;--bor
 .show-sidebar{position:absolute;left:10px;top:10px;z-index:690;padding:9px 12px;font-weight:800}.hidden{display:none!important}.layout.sidebar-hidden{grid-template-columns:0 1fr}.layout.sidebar-hidden .sidebar{transform:translateX(-100%)}
 .summary-bubble{background:#0f6b78;color:#fff;border:3px solid #fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;box-shadow:0 4px 12px rgba(15,23,42,.2)}
 @media(max-width:800px){.topbar{height:120px;padding:14px}.brand-block h1{font-size:19px}.brand-block p{display:none}.topbar nav{display:none}.layout{height:calc(100vh - 120px);grid-template-columns:310px 1fr}.sidebar{position:absolute;left:0;top:0;height:100%;width:310px}.layout.sidebar-hidden{grid-template-columns:1fr}.legend{width:210px}.detail-panel{width:94vw}}
+/* Revisión de presentación e interacción de leyenda */
+.legend{width:280px;max-height:min(520px,70vh)}
+.legend-body,.legend #legendBody{max-height:430px;overflow:auto}
+.legend-help{font-size:10px;line-height:1.35;color:var(--muted);margin-bottom:7px}
+.legend-option{width:100%;border:1px solid transparent;background:transparent;color:var(--text);padding:6px 7px;border-radius:8px;cursor:pointer;text-align:left;display:grid;grid-template-columns:18px 14px 1fr;align-items:center;gap:7px;margin:3px 0;font-size:11px}
+.legend-option:hover{background:var(--soft)}
+.legend-option.active{background:var(--soft);border-color:var(--accent)}
+.legend-check{width:16px;height:16px;border:1px solid var(--border);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;background:var(--panel)}
+.legend-option.active .legend-check{background:var(--accent);border-color:var(--accent);color:#fff}
+.legend-dot{box-sizing:border-box}
+.legend-actions{display:flex;justify-content:flex-end;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
+.legend-actions button{border:1px solid var(--border);background:var(--panel);color:var(--text);border-radius:7px;padding:5px 8px;font-size:10px;cursor:pointer}
+.legend-actions button:hover{background:var(--soft)}
+.panel select,.panel input{transition:border-color .15s ease,box-shadow .15s ease}
+.panel select:focus,.panel input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(15,107,120,.12)}
+.download-button{width:100%;margin-top:10px}
+@media(max-width:800px){.legend{width:250px;max-height:55vh}.legend-body,.legend #legendBody{max-height:330px}}
