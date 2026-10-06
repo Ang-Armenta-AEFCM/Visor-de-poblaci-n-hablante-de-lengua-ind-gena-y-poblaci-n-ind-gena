@@ -2,7 +2,8 @@ const DATA = {
   base: 'data/base_cct.json',
   siieweb: 'data/indigenas_siieweb.json',
   source911: 'data/hablantes_911.json',
-  alcaldias: 'data/alcaldias.json'
+  alcaldias: 'data/alcaldias.json',
+  inmuebles: 'data/inmuebles_oficiales.json'
 };
 
 let baseRows = [];
@@ -11,6 +12,7 @@ let source911Rows = [];
 let groupCatalog = [];
 let meta = {};
 let alcaldiasGeo = null;
+let officialInmuebles = [];
 let siByCct = new Map();
 let source911ByCct = new Map();
 let baseByCct = new Map();
@@ -44,7 +46,7 @@ const n = v => {
 };
 const norm = v => clean(v).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, ' ').trim();
 const normTurn = v => norm(v);
-const fmt = v => v === null || v === undefined || v === '' ? 'Sin registro' : Number(v).toLocaleString('es-MX');
+const fmt = v => v === null || v === undefined || v === '' ? '0' : Number(v).toLocaleString('es-MX');
 const fmtPct = v => v === null || !Number.isFinite(v) ? 'Sin registro' : `${v.toLocaleString('es-MX',{maximumFractionDigits:1})}%`;
 const esc = s => clean(s).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 const uniq = arr => [...new Set(arr.filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
@@ -68,7 +70,7 @@ async function init(){
   bindUI();
   restoreTheme();
   try{
-    const [base,si,s911,alc] = await Promise.all(Object.values(DATA).map(fetchJson));
+    const [base,si,s911,alc,inmuebles] = await Promise.all(Object.values(DATA).map(fetchJson));
     meta = base.meta || {};
     baseRows = base.registros || [];
     siRows = si.registros || [];
@@ -77,6 +79,7 @@ async function init(){
     siRows.forEach(r=>Object.entries(r.grupos||{}).forEach(([g,v])=>groupTotals.set(g,(groupTotals.get(g)||0)+(n(v)||0))));
     groupCatalog = (si.grupos || []).filter(g=>(groupTotals.get(g)||0)>0);
     alcaldiasGeo = alc;
+    officialInmuebles = Array.isArray(inmuebles) ? inmuebles : [];
     baseByCct = new Map(baseRows.map(r => [r.cct,r]));
     siByCct = indexRows(siRows);
     source911ByCct = indexRows(source911Rows);
@@ -133,7 +136,6 @@ function bindUI(){
     const body=$('legendBody'); const hidden=body.classList.toggle('hidden'); $('toggleLegend').textContent=hidden?'+':'−';
   });
   $('closeDetail').addEventListener('click',closeDetail);
-  $('downloadVisible').addEventListener('click',downloadVisibleCsv);
   $('rangeClear').addEventListener('click',()=>{ legendSelection.clear(); renderMap(); updateStats(); renderRangeSelector(); });
   map.on('zoomend',renderMap);
   document.addEventListener('fullscreenchange',()=>setTimeout(()=>map.invalidateSize(),100));
@@ -157,9 +159,9 @@ function syncSourceUI(){
   if(!isSi){ $('grupoIndigena').value=''; }
   const groupActive=isSi && !!$('grupoIndigena').value;
   [...$('filtroEstado').options].forEach(o=>{
-    if(['cero','sin'].includes(o.value)) o.disabled=groupActive;
+    if(o.value==='cero') o.disabled=groupActive;
   });
-  if(groupActive && ['cero','sin'].includes($('filtroEstado').value)) $('filtroEstado').value='casos';
+  if(groupActive && $('filtroEstado').value==='cero') $('filtroEstado').value='casos';
   $('kpiIndicadorLabel').textContent=isSi?'Pertenecientes (SIIEWEB)':'Niños indígenas / hablantes (911)';
 }
 
@@ -207,8 +209,7 @@ function applyFilters(resetView=false){
     if(group && m.value<=0) return false;
     if(estado==='casos' && m.value<=0) return false;
     if(estado==='registro' && !m.hasRecord) return false;
-    if(estado==='cero' && (!m.hasRecord || m.value!==0)) return false;
-    if(estado==='sin' && m.hasRecord) return false;
+    if(estado==='cero' && m.value!==0) return false;
     b.__metric=m;
     return true;
   });
@@ -288,13 +289,12 @@ function siteMetricInfo(site){
 function displayedValue(info){ return info.value; }
 function legendCategories(){
   return [
-    {id:'sin',label:'Sin registro',color:'#ffffff',border:'#64748b',test:i=>!i.hasRecord},
-    {id:'cero',label:'Registro en cero',color:'#94a3b8',border:'#64748b',test:i=>i.hasRecord&&i.value===0},
-    {id:'q1',label:'1 estudiante',color:'#dbeafe',border:'#2563eb',test:i=>i.hasRecord&&i.value===1},
-    {id:'q25',label:'2–5 estudiantes',color:'#7dd3fc',border:'#0369a1',test:i=>i.hasRecord&&i.value>=2&&i.value<=5},
-    {id:'q610',label:'6–10 estudiantes',color:'#38bdf8',border:'#075985',test:i=>i.hasRecord&&i.value>=6&&i.value<=10},
-    {id:'q1125',label:'11–25 estudiantes',color:'#0284c7',border:'#0c4a6e',test:i=>i.hasRecord&&i.value>=11&&i.value<=25},
-    {id:'qgt25',label:'Más de 25 estudiantes',color:'#4c1d95',border:'#2e1065',test:i=>i.hasRecord&&i.value>25}
+    {id:'cero',label:'0 estudiantes',color:'#94a3b8',border:'#64748b',test:i=>i.value===0},
+    {id:'q1',label:'1 estudiante',color:'#dbeafe',border:'#2563eb',test:i=>i.value===1},
+    {id:'q25',label:'2–5 estudiantes',color:'#7dd3fc',border:'#0369a1',test:i=>i.value>=2&&i.value<=5},
+    {id:'q610',label:'6–10 estudiantes',color:'#38bdf8',border:'#075985',test:i=>i.value>=6&&i.value<=10},
+    {id:'q1125',label:'11–25 estudiantes',color:'#0284c7',border:'#0c4a6e',test:i=>i.value>=11&&i.value<=25},
+    {id:'qgt25',label:'Más de 25 estudiantes',color:'#4c1d95',border:'#2e1065',test:i=>i.value>25}
   ];
 }
 function legendCategoryForInfo(info){
@@ -322,7 +322,7 @@ function drawSiteMarkers(){
     const marker=L.circleMarker([lat,lon],{
       renderer:schoolRenderer, pane:'schoolPane',
       radius:markerRadius(display), color:cat.border||'#334155', weight:2.2,
-      fillColor:cat.color, fillOpacity:info.hasRecord ? 0.94 : 0.78, opacity:1
+      fillColor:cat.color, fillOpacity:0.94, opacity:1
     });
     marker.bindPopup(buildPopup(site),{maxWidth:380,minWidth:290,autoPan:true});
     marker.on('popupopen',()=>bindPopup(site,marker));
@@ -345,7 +345,7 @@ function buildPopup(site){
   return `<div class="school-popup">
     <h3>${esc(first.nombre)}${site.ccts.length>1?` <small>+${site.ccts.length-1} CCT</small>`:''}</h3>
     <div class="popup-meta">${esc(first.alcaldia)} · ${esc(first.nivel)}<br>${site.ccts.map(x=>esc(x.cct)).join(' · ')}</div>
-    <div class="popup-metric"><span>${esc(metricLabel)}</span><br><strong>${info.hasRecord?val.toLocaleString('es-MX'):'Sin registro'}</strong></div>
+    <div class="popup-metric"><span>${esc(metricLabel)}</span><br><strong>${val.toLocaleString('es-MX')}</strong></div>
     <button class="popup-open" type="button" data-open-detail>Abrir ficha</button>
   </div>`;
 }
@@ -376,36 +376,45 @@ function detailHtml(b){
   const siAll=sourceRowsFor(b.cct,'siieweb',turno);
   const si=siAll.filter(r=>!r.fallback_matricula);
   const s911=sourceRowsFor(b.cct,'911',turno);
-  const siTotal=si.length?si.reduce((s,r)=>s+(n(r.total_pertenecientes)||0),0):null;
+  const siTotal=si.length?si.reduce((s,r)=>s+(n(r.total_pertenecientes)||0),0):0;
   const siMatVals=siAll.map(r=>n(r.matricula)).filter(v=>v!==null); const siMat=siMatVals.length?siMatVals.reduce((a,b)=>a+b,0):null;
   const groupTotals=new Map(); si.forEach(r=>Object.entries(r.grupos||{}).forEach(([g,v])=>groupTotals.set(g,(groupTotals.get(g)||0)+(n(v)||0))));
   const groups=[...groupTotals.entries()].filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
-  const h=s911.length?s911.reduce((s,r)=>s+(n(r.hombres)||0),0):null;
-  const m=s911.length?s911.reduce((s,r)=>s+(n(r.mujeres)||0),0):null;
-  const t=s911.length?s911.reduce((s,r)=>s+(n(r.total)||0),0):null;
+  const h=s911.length?s911.reduce((s,r)=>s+(n(r.hombres)||0),0):0;
+  const m=s911.length?s911.reduce((s,r)=>s+(n(r.mujeres)||0),0):0;
+  const t=s911.length?s911.reduce((s,r)=>s+(n(r.total)||0),0):0;
   return `
     <section class="info-card"><h3>General</h3><div class="detail-grid">
       ${detailCell('CCT',b.cct)}${detailCell('Nombre',b.nombre)}${detailCell('Nivel',b.nivel)}${detailCell('Turnos',(b.turnos||[]).join(' / ')||'Sin registro')}
       ${detailCell('Sostenimiento',b.sostenimiento)}${detailCell('Alcaldía',b.alcaldia)}${detailCell('Domicilio',b.domicilio||'Sin registro')}${detailCell('Localidad / colonia',b.localidad||b.colonia||'Sin registro')}
     </div></section>
     <section class="info-card"><h3>Número de estudiantes pertenecientes a un grupo indígena por CCT (SIIEWEB)</h3>
-      ${si.length?`<div class="detail-grid">${detailCell('Total pertenecientes',fmt(siTotal))}${detailCell('Matrícula total (SIIEWEB)',fmt(siMat))}${detailCell('Turno consultado',turno||'Todos')}</div>
-      <div class="group-list" style="margin-top:9px">${groups.length?groups.map(([g,v])=>`<span class="group-tag">${esc(g)}: ${v.toLocaleString('es-MX')}</span>`).join(''):'<span class="muted-box">Registro en cero: no hay grupo indígena con estudiantes reportados.</span>'}</div>`:'<p class="muted-box">Sin registro (SIIEWEB).</p>'}
+      <div class="detail-grid">${detailCell('Total pertenecientes',fmt(siTotal))}${detailCell('Matrícula total (SIIEWEB)',fmt(siMat))}${detailCell('Turno consultado',turno||'Todos')}</div>
+      <div class="group-list" style="margin-top:9px">${groups.length?groups.map(([g,v])=>`<span class="group-tag">${esc(g)}: ${v.toLocaleString('es-MX')}</span>`).join(''):'<span class="muted-box">0 estudiantes reportados.</span>'}</div>
       <p class="source-note">Fuente: SIIEWEB, actualización del 17 de julio de 2026.</p>
     </section>
     <section class="info-card"><h3>Número de niños indígenas o hablantes de alguna lengua indígena (Estadística 911)</h3>
-      ${s911.length?`<div class="detail-grid">${detailCell('Hombres',fmt(h))}${detailCell('Mujeres',fmt(m))}${detailCell('Total',fmt(t))}${detailCell('Turno consultado',turno||'Todos')}</div>`:'<p class="muted-box">Sin registro (Estadística 911).</p>'}
+      <div class="detail-grid">${detailCell('Hombres',fmt(h))}${detailCell('Mujeres',fmt(m))}${detailCell('Total',fmt(t))}${detailCell('Turno consultado',turno||'Todos')}</div>
       <p class="source-note">Fuente: Estadística 911. Solo preescolar, primaria y secundaria.</p>
     </section>`;
 }
 function detailCell(label,value){return `<div><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`}
+
+function countOfficialInmuebles(ccts){
+  const wanted=new Set((ccts||[]).map(b=>typeof b==='string'?b:b.cct).filter(Boolean));
+  if(!officialInmuebles.length) return effectiveSites().filter(s=>Number.isFinite(s.lat)&&Number.isFinite(s.lon)).length;
+  return officialInmuebles.filter(inmueble=>
+    !/^(COORD-|PROGRAMA-|base-cct-)/i.test(String(inmueble.id||'')) &&
+    (inmueble.ccts||[]).some(cct=>wanted.has(cct))
+  ).length;
+}
 
 function updateStats(){
   const source=$('fuenteIndicador').value;
   const group=$('grupoIndigena').value;
   const rows=effectiveCcts();
   const metric=rows.reduce((s,b)=>s+(b.__metric?.value||0),0);
-  const sites=effectiveSites().filter(s=>Number.isFinite(s.lat)&&Number.isFinite(s.lon)).length;
+  const sites=countOfficialInmuebles(rows);
   const matricula=rows.reduce((s,b)=>{
     const rs=sourceRowsFor(b.cct,'siieweb',$('filtroTurno').value);
     const vals=rs.map(r=>n(r.matricula)).filter(v=>v!==null); return s+(vals.length?vals.reduce((a,c)=>a+c,0):0);
@@ -445,7 +454,7 @@ function renderLegend(){
   const group=$('grupoIndigena').value;
   $('legendTitle').textContent=source==='siieweb'?(group?`${group} (SIIEWEB)`:'Pertenencia a grupo indígena (SIIEWEB)'):'Niños indígenas / hablantes (Estadística 911)';
   const cats=legendCategories();
-  $('legendBody').innerHTML=`<div class="legend-help">La simbología representa el número de estudiantes registrado para el indicador seleccionado.</div>`+
+  $('legendBody').innerHTML=`<div class="legend-help">La simbología representa el número de estudiantes para el indicador seleccionado; los CCT sin registro se muestran como 0.</div>`+
     cats.map(c=>`<div class="legend-row"><span class="legend-dot" style="background:${c.color};border-color:${c.border}"></span><span>${c.label}</span></div>`).join('')+
     `<div class="legend-scale-note">El tamaño del punto aumenta con la cantidad de estudiantes.</div>`;
 }
@@ -465,14 +474,3 @@ function setStatus(text,error=false){
   const el=$('mapStatus'); if(!text){el.classList.add('hidden');return;} el.textContent=text; el.classList.remove('hidden'); if(error) el.style.color='#991b1b';
 }
 
-function downloadVisibleCsv(){
-  const source=$('fuenteIndicador').value; const group=$('grupoIndigena').value; const turno=$('filtroTurno').value;
-  const rows=[['CCT','Nombre','Nivel','Alcaldía','Sostenimiento','Turnos','Latitud','Longitud','Indicador','Valor','Matrícula SIIEWEB','Fuente']];
-  effectiveCcts().forEach(b=>{
-    const m=metricFor(b,source,turno,group);
-    rows.push([b.cct,b.nombre,b.nivel,b.alcaldia,b.sostenimiento,(b.turnos||[]).join(' / '),b.lat??'',b.lon??'',source==='siieweb'?(group||'Pertenencia a grupo indígena'):'Niños indígenas o hablantes de lengua indígena',m.hasRecord?m.value:'Sin registro',m.matricula??'',source==='siieweb'?'SIIEWEB':'Estadística 911']);
-  });
-  const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
-  const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}); const url=URL.createObjectURL(blob);
-  const a=document.createElement('a'); a.href=url;a.download='CCT_visibles_indigenas.csv';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
-}

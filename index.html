@@ -6,7 +6,7 @@
   <meta name="description" content="Visor de estudiantes pertenecientes a grupos indígenas y hablantes de lengua indígena en planteles educativos de la Ciudad de México.">
   <title>Visor de población indígena en planteles educativos</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="style.css?v=20261006-3">
+  <link rel="stylesheet" href="style.css?v=20261006-4">
 </head>
 <body>
 <header class="topbar">
@@ -37,6 +37,18 @@
       <p id="grupoHint" class="hint">Al seleccionar un grupo, el mapa muestra únicamente CCT con al menos un estudiante registrado en ese grupo.</p>
     </section>
 
+    <section class="panel range-panel">
+      <div class="panel-title-row">
+        <div>
+          <span class="panel-kicker">Visualización</span>
+          <h2>Rangos del indicador</h2>
+        </div>
+        <button id="rangeClear" class="text-button" type="button">Mostrar todos</button>
+      </div>
+      <p class="hint range-hint">Selecciona uno o varios rangos. El mapa y el resumen se actualizarán con la selección.</p>
+      <div id="rangeSelector" class="range-selector"></div>
+    </section>
+
     <section class="panel">
       <h2>Filtros</h2>
       <label for="filtroAlcaldia">Alcaldía</label>
@@ -52,43 +64,29 @@
         <option value="">Todos</option>
         <option value="casos">Con casos (&gt; 0)</option>
         <option value="registro">Con registro</option>
-        <option value="cero">Con registro en cero</option>
-        <option value="sin">Sin registro</option>
+        <option value="cero">Cero</option>
       </select>
       <label for="buscar">Buscar CCT o nombre</label>
       <input id="buscar" type="search" placeholder="Ej. 09DPR... o nombre del plantel">
       <div class="buttons"><button id="btnLimpiar" class="secondary" type="button">Limpiar filtros</button></div>
     </section>
 
-    <section class="panel range-panel">
-      <div class="panel-title-row">
-        <div>
-          <span class="panel-kicker">Visualización</span>
-          <h2>Rangos del indicador</h2>
-        </div>
-        <button id="rangeClear" class="text-button" type="button">Mostrar todos</button>
-      </div>
-      <p class="hint range-hint">Selecciona uno o varios rangos. El mapa, el resumen y la descarga se actualizarán con la selección.</p>
-      <div id="rangeSelector" class="range-selector"></div>
-    </section>
-
     <section class="panel compact">
       <h2>Resumen visible</h2>
       <div class="kpis">
         <div><strong id="kpiCct">0</strong><span>CCT</span></div>
-        <div><strong id="kpiPlanteles">0</strong><span>Planteles / puntos</span></div>
+        <div><strong id="kpiPlanteles">0</strong><span>Inmuebles totales</span></div>
         <div><strong id="kpiIndicador">0</strong><span id="kpiIndicadorLabel">Estudiantes (SIIEWEB)</span></div>
         <div><strong id="kpiMatricula">0</strong><span>Matrícula SIIEWEB</span></div>
       </div>
       <p id="summaryNote" class="summary-note"></p>
-      <button id="downloadVisible" class="download-button" type="button">Descargar CCT visibles (CSV)</button>
     </section>
 
     <section class="panel methodology">
       <h2>Fuentes</h2>
       <p><strong>Pertenencia indígena (SIIEWEB):</strong> “Número de estudiantes pertenecientes a un grupo indígena por CCT” (SIIEWEB, 17 de julio de 2026).</p>
       <p><strong>Estadística 911:</strong> “Número de niños indígenas o hablantes de alguna lengua indígena” (Estadística 911). Esta fuente contiene preescolar, primaria y secundaria.</p>
-      <p><strong>Sin registro ≠ cero.</strong> Si el CCT no aparece en una fuente se muestra “Sin registro”; un valor 0 se conserva como registro en cero.</p>
+      <p><strong>Valor cero.</strong> Para la visualización del indicador, los CCT sin registro en la fuente se representan junto con los registros en cero.</p>
     </section>
   </aside>
 
@@ -114,6 +112,6 @@
 </main>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="script.js?v=20261006-3"></script>
+<script src="script.js?v=20261006-4"></script>
 </body>
 </html>
