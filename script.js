@@ -414,7 +414,9 @@ function updateStats(){
   const group=$('grupoIndigena').value;
   const rows=effectiveCcts();
   const metric=rows.reduce((s,b)=>s+(b.__metric?.value||0),0);
-  const sites=countOfficialInmuebles(rows);
+  // El recuento visible debe corresponder a los puntos/inmuebles que dibuja el mapa
+  // tras aplicar filtros y rangos; el catálogo oficial excluía miles de claves auxiliares.
+  const sites=effectiveSites().filter(s=>Number.isFinite(s.lat)&&Number.isFinite(s.lon)).length;
   const matricula=rows.reduce((s,b)=>{
     const rs=sourceRowsFor(b.cct,'siieweb',$('filtroTurno').value);
     const vals=rs.map(r=>n(r.matricula)).filter(v=>v!==null); return s+(vals.length?vals.reduce((a,c)=>a+c,0):0);
@@ -423,7 +425,7 @@ function updateStats(){
   $('kpiPlanteles').textContent=sites.toLocaleString('es-MX');
   $('kpiIndicador').textContent=metric.toLocaleString('es-MX');
   $('kpiMatricula').textContent=matricula.toLocaleString('es-MX');
-  const withCoords=rows.filter(b=>Number.isFinite(b.lat)&&Number.isFinite(b.lon)).length;
+  const withCoords=effectiveSites().filter(s=>Number.isFinite(s.lat)&&Number.isFinite(s.lon)).reduce((sum,s)=>sum+s.ccts.length,0);
   let note=`${withCoords.toLocaleString('es-MX')} CCT visibles en mapa; ${(rows.length-withCoords).toLocaleString('es-MX')} sin coordenadas.`;
   if(legendSelection.size) note+=` Rangos activos: ${legendSelection.size}.`;
   if(source==='siieweb'){
