@@ -142,7 +142,7 @@ function bindUI(){
 }
 
 function populateFilters(){
-  fillSelect('filtroAlcaldia',uniq(baseRows.map(r=>r.alcaldia)),'Todas');
+  fillSelect('filtroAlcaldia',uniq(baseRows.map(r=>r.alcaldia).filter(v=>norm(v)!=='SIN REGISTRO')),'Todas');
   fillSelect('filtroNivel',uniq(baseRows.map(r=>r.nivel)),'Todos');
   fillSelect('filtroSostenimiento',uniq(baseRows.map(r=>r.sostenimiento)),'Todos');
   fillSelect('filtroTurno',uniq(baseRows.flatMap(r=>r.turnos || [])),'Todos');
@@ -162,7 +162,7 @@ function syncSourceUI(){
     if(o.value==='cero') o.disabled=groupActive;
   });
   if(groupActive && $('filtroEstado').value==='cero') $('filtroEstado').value='casos';
-  $('kpiIndicadorLabel').textContent=isSi?'Pertenecientes (SIIEWEB)':'Niños indígenas / hablantes (911)';
+  $('kpiIndicadorLabel').textContent=isSi?'Pertenecientes (SIIEWEB)':'Niñas (os) indígenas / hablantes (911)';
 }
 
 function sourceRowsFor(cct,source,turno){
@@ -255,7 +255,7 @@ function drawAlcaldias(){
   if(!alcaldiasGeo) return;
   L.geoJSON(alcaldiasGeo,{
     interactive:false,
-    style:{color:'#0f4c75',weight:2,opacity:.8,fillColor:'#0f6b78',fillOpacity:.02}
+    style:{color:'#691c32',weight:2,opacity:.8,fillColor:'#a57f2c',fillOpacity:.02}
   }).addTo(alcaldiaLayer);
   if(!map.hasLayer(alcaldiaLayer)) alcaldiaLayer.addTo(map);
 }
@@ -289,12 +289,12 @@ function siteMetricInfo(site){
 function displayedValue(info){ return info.value; }
 function legendCategories(){
   return [
-    {id:'cero',label:'0 estudiantes',color:'#94a3b8',border:'#64748b',test:i=>i.value===0},
-    {id:'q1',label:'1 estudiante',color:'#dbeafe',border:'#2563eb',test:i=>i.value===1},
-    {id:'q25',label:'2–5 estudiantes',color:'#7dd3fc',border:'#0369a1',test:i=>i.value>=2&&i.value<=5},
-    {id:'q610',label:'6–10 estudiantes',color:'#38bdf8',border:'#075985',test:i=>i.value>=6&&i.value<=10},
-    {id:'q1125',label:'11–25 estudiantes',color:'#0284c7',border:'#0c4a6e',test:i=>i.value>=11&&i.value<=25},
-    {id:'qgt25',label:'Más de 25 estudiantes',color:'#4c1d95',border:'#2e1065',test:i=>i.value>25}
+    {id:'cero',label:'0 niñas (os)',color:'#94a3b8',border:'#64748b',test:i=>i.value===0},
+    {id:'q1',label:'1 niña (o)',color:'#dbeafe',border:'#2563eb',test:i=>i.value===1},
+    {id:'q25',label:'2–5 niñas (os)',color:'#7dd3fc',border:'#0369a1',test:i=>i.value>=2&&i.value<=5},
+    {id:'q610',label:'6–10 niñas (os)',color:'#38bdf8',border:'#075985',test:i=>i.value>=6&&i.value<=10},
+    {id:'q1125',label:'11–25 niñas (os)',color:'#0284c7',border:'#0c4a6e',test:i=>i.value>=11&&i.value<=25},
+    {id:'qgt25',label:'Más de 25 niñas (os)',color:'#4c1d95',border:'#2e1065',test:i=>i.value>25}
   ];
 }
 function legendCategoryForInfo(info){
@@ -341,7 +341,7 @@ function buildPopup(site){
   const source=$('fuenteIndicador').value;
   const group=$('grupoIndigena').value;
   const info=siteMetricInfo(site); const val=info.value; const mat=info.matricula;
-  const metricLabel=source==='siieweb'?(group?`${group} (SIIEWEB)`:'Número de estudiantes pertenecientes a un grupo indígena por CCT (SIIEWEB)'):'Número de niños indígenas o hablantes de alguna lengua indígena (Estadística 911)';
+  const metricLabel=source==='siieweb'?(group?`${group} (SIIEWEB)`:'Número de niñas (os) pertenecientes a un grupo indígena por CCT (SIIEWEB)'):'Número de niñas (os) indígenas o hablantes de alguna lengua indígena (Estadística 911)';
   return `<div class="school-popup">
     <h3>${esc(first.nombre)}${site.ccts.length>1?` <small>+${site.ccts.length-1} CCT</small>`:''}</h3>
     <div class="popup-meta">${esc(first.alcaldia)} · ${esc(first.nivel)}<br>${site.ccts.map(x=>esc(x.cct)).join(' · ')}</div>
@@ -360,14 +360,26 @@ function bindPopup(site,marker){
 function openDetail(site){
   const panel=$('detailPanel');
   $('detailTitle').textContent=site.ccts.length>1?'Ficha del plantel / punto':'Ficha del CCT';
-  const chooser=site.ccts.length>1?`<div class="cct-chooser">${site.ccts.map((b,i)=>`<button type="button" class="${i===0?'active':''}" data-cct-choice="${esc(b.cct)}">${esc(b.cct)}</button>`).join('')}</div>`:'';
-  $('detailContent').innerHTML=chooser+detailHtml(site.ccts[0]);
+  const chooser=site.ccts.length>1?`<div class="cct-navigation"><div class="cct-navigation-title">CCT del plantel <span id="cctPosition">1 de ${site.ccts.length}</span></div><div class="cct-navigation-controls"><button type="button" class="secondary" id="cctPrev" aria-label="CCT anterior">‹</button><select id="cctSelect" aria-label="Seleccionar CCT">${site.ccts.map((b,i)=>`<option value="${i}">${esc(b.cct)}</option>`).join('')}</select><button type="button" class="secondary" id="cctNext" aria-label="CCT siguiente">›</button></div></div>`:'';
+  $('detailContent').innerHTML=chooser+'<div id="selectedCctDetail"></div>';
+  const content=$('detailContent');
+  const renderCct=(index)=>{
+    const b=site.ccts[index];
+    content.querySelector('#selectedCctDetail').innerHTML=detailHtml(b);
+    if(site.ccts.length>1){
+      content.querySelector('#cctSelect').value=String(index);
+      content.querySelector('#cctPosition').textContent=`${index+1} de ${site.ccts.length}`;
+      content.querySelector('#cctPrev').disabled=index===0;
+      content.querySelector('#cctNext').disabled=index===site.ccts.length-1;
+    }
+  };
+  renderCct(0);
+  if(site.ccts.length>1){
+    content.querySelector('#cctSelect').onchange=e=>renderCct(Number(e.target.value));
+    content.querySelector('#cctPrev').onclick=()=>renderCct(Math.max(0,Number(content.querySelector('#cctSelect').value)-1));
+    content.querySelector('#cctNext').onclick=()=>renderCct(Math.min(site.ccts.length-1,Number(content.querySelector('#cctSelect').value)+1));
+  }
   panel.classList.add('open'); panel.setAttribute('aria-hidden','false');
-  panel.querySelectorAll('[data-cct-choice]').forEach(btn=>btn.onclick=()=>{
-    panel.querySelectorAll('[data-cct-choice]').forEach(x=>x.classList.remove('active')); btn.classList.add('active');
-    const b=site.ccts.find(x=>x.cct===btn.dataset.cctChoice); const chooserEl=panel.querySelector('.cct-chooser');
-    const temp=document.createElement('div'); temp.innerHTML=detailHtml(b); while(chooserEl.nextSibling) chooserEl.nextSibling.remove(); [...temp.childNodes].forEach(n=>panel.appendChild(n));
-  });
 }
 function closeDetail(){ $('detailPanel').classList.remove('open'); $('detailPanel').setAttribute('aria-hidden','true'); }
 
@@ -385,15 +397,15 @@ function detailHtml(b){
   const t=s911.length?s911.reduce((s,r)=>s+(n(r.total)||0),0):0;
   return `
     <section class="info-card"><h3>General</h3><div class="detail-grid">
-      ${detailCell('CCT',b.cct)}${detailCell('Nombre',b.nombre)}${detailCell('Nivel',b.nivel)}${detailCell('Turnos',(b.turnos||[]).join(' / ')||'Sin registro')}
+      ${detailCell('CCT',b.cct)}${detailCell('Nombre',b.nombre)}${detailCell('Nivel',b.nivel)}${detailCell('Turno',(b.turnos||[]).join(' / ')||'Sin registro')}
       ${detailCell('Sostenimiento',b.sostenimiento)}${detailCell('Alcaldía',b.alcaldia)}${detailCell('Domicilio',b.domicilio||'Sin registro')}${detailCell('Localidad / colonia',b.localidad||b.colonia||'Sin registro')}
     </div></section>
-    <section class="info-card"><h3>Número de estudiantes pertenecientes a un grupo indígena por CCT (SIIEWEB)</h3>
+    <section class="info-card"><h3>Número de niñas (os) pertenecientes a un grupo indígena por CCT (SIIEWEB)</h3>
       <div class="detail-grid">${detailCell('Total pertenecientes',fmt(siTotal))}${detailCell('Matrícula total (SIIEWEB)',fmt(siMat))}${detailCell('Turno consultado',turno||'Todos')}</div>
-      <div class="group-list" style="margin-top:9px">${groups.length?groups.map(([g,v])=>`<span class="group-tag">${esc(g)}: ${v.toLocaleString('es-MX')}</span>`).join(''):'<span class="muted-box">0 estudiantes reportados.</span>'}</div>
+      <div class="group-list" style="margin-top:9px">${groups.length?groups.map(([g,v])=>`<span class="group-tag">${esc(g)}: ${v.toLocaleString('es-MX')}</span>`).join(''):'<span class="muted-box">0 niñas (os) reportados.</span>'}</div>
       <p class="source-note">Fuente: SIIEWEB, actualización del 17 de julio de 2026.</p>
     </section>
-    <section class="info-card"><h3>Número de niños indígenas o hablantes de alguna lengua indígena (Estadística 911)</h3>
+    <section class="info-card"><h3>Número de niñas (os) indígenas o hablantes de alguna lengua indígena (Estadística 911)</h3>
       <div class="detail-grid">${detailCell('Hombres',fmt(h))}${detailCell('Mujeres',fmt(m))}${detailCell('Total',fmt(t))}${detailCell('Turno consultado',turno||'Todos')}</div>
       <p class="source-note">Fuente: Estadística 911. Solo preescolar, primaria y secundaria.</p>
     </section>`;
