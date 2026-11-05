@@ -2,8 +2,7 @@ const DATA = {
   base: 'data/base_cct.json',
   siieweb: 'data/indigenas_siieweb.json',
   source911: 'data/hablantes_911.json',
-  alcaldias: 'data/alcaldias.json',
-  inmuebles: 'data/inmuebles_oficiales.json'
+  alcaldias: 'data/alcaldias.json'
 };
 
 let baseRows = [];
@@ -12,7 +11,6 @@ let source911Rows = [];
 let groupCatalog = [];
 let meta = {};
 let alcaldiasGeo = null;
-let officialInmuebles = [];
 let siByCct = new Map();
 let source911ByCct = new Map();
 let baseByCct = new Map();
@@ -34,19 +32,20 @@ const lightTiles = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/serv
   attribution: 'Tiles &copy; Esri'
 }).addTo(map);
 const darkTiles = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
-  maxZoom: 16,
+  maxNativeZoom: 16, maxZoom: 19,
   attribution: 'Tiles &copy; Esri'
 });
 
 const $ = id => document.getElementById(id);
 const clean = v => v === null || v === undefined ? '' : String(v).trim();
 const n = v => {
+  if(v === null || v === undefined || String(v).trim() === '') return null;
   const x = Number(v);
   return Number.isFinite(x) ? x : null;
 };
 const norm = v => clean(v).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, ' ').trim();
 const normTurn = v => norm(v);
-const fmt = v => v === null || v === undefined || v === '' ? '0' : Number(v).toLocaleString('es-MX');
+const fmt = v => v === null || v === undefined || v === '' ? 'Sin registro' : Number(v).toLocaleString('es-MX');
 const fmtPct = v => v === null || !Number.isFinite(v) ? 'Sin registro' : `${v.toLocaleString('es-MX',{maximumFractionDigits:1})}%`;
 const esc = s => clean(s).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 const uniq = arr => [...new Set(arr.filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
@@ -70,7 +69,7 @@ async function init(){
   bindUI();
   restoreTheme();
   try{
-    const [base,si,s911,alc,inmuebles] = await Promise.all(Object.values(DATA).map(fetchJson));
+    const [base,si,s911,alc] = await Promise.all(Object.values(DATA).map(fetchJson));
     meta = base.meta || {};
     baseRows = base.registros || [];
     siRows = si.registros || [];
@@ -79,7 +78,6 @@ async function init(){
     siRows.forEach(r=>Object.entries(r.grupos||{}).forEach(([g,v])=>groupTotals.set(g,(groupTotals.get(g)||0)+(n(v)||0))));
     groupCatalog = (si.grupos || []).filter(g=>(groupTotals.get(g)||0)>0);
     alcaldiasGeo = alc;
-    officialInmuebles = Array.isArray(inmuebles) ? inmuebles : [];
     baseByCct = new Map(baseRows.map(r => [r.cct,r]));
     siByCct = indexRows(siRows);
     source911ByCct = indexRows(source911Rows);
@@ -143,8 +141,8 @@ function bindUI(){
 
 function populateFilters(){
   fillSelect('filtroAlcaldia',uniq(baseRows.map(r=>r.alcaldia).filter(v=>norm(v)!=='SIN REGISTRO')),'Todas');
-  fillSelect('filtroNivel',uniq(baseRows.map(r=>r.nivel)),'Todos');
-  fillSelect('filtroSostenimiento',uniq(baseRows.map(r=>r.sostenimiento)),'Todos');
+  fillSelect('filtroNivel',uniq(baseRows.map(r=>r.nivel).filter(v=>norm(v)!=='OTRO NIVEL EDUCATIVO')),'Todos');
+  fillSelect('filtroSostenimiento',uniq(baseRows.map(r=>r.sostenimiento).filter(v=>norm(v)!=='SIN REGISTRO')),'Todos');
   fillSelect('filtroTurno',uniq(baseRows.flatMap(r=>r.turnos || [])),'Todos');
   $('grupoIndigena').innerHTML='<option value="">Todos los grupos</option>'+groupCatalog.map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join('');
   syncSourceUI();
@@ -232,14 +230,26 @@ function siteKey(b){
 }
 function buildSites(){
   siteByKey=new Map();
-  // Se construyen los puntos a partir del resultado de los filtros generales.
-  // La selección de rangos se aplica después; usar effectiveCcts() aquí dejaba
-  // el mapa vacío en la primera carga porque visibleSites todavía no existía.
+  const clustersByIdentifier=new Map();
+  // Un identificador administrativo puede aparecer en edificios físicamente alejados.
+  // Evitamos reunirlos en un mismo punto si sus coordenadas están a más de 250 m.
   filteredCcts.forEach(b=>{
-    const key=siteKey(b);
-    if(!siteByKey.has(key)) siteByKey.set(key,{key,ccts:[],lat:b.lat,lon:b.lon,alcaldia:b.alcaldia});
-    const s=siteByKey.get(key); s.ccts.push(b);
-    if((s.lat===null||s.lat===undefined) && Number.isFinite(b.lat)) {s.lat=b.lat;s.lon=b.lon;}
+    const identifier=siteKey(b);
+    if(!clustersByIdentifier.has(identifier)) clustersByIdentifier.set(identifier,[]);
+    const clusters=clustersByIdentifier.get(identifier);
+    const hasCoords=Number.isFinite(b.lat) && Number.isFinite(b.lon);
+    let site=clusters.find(s=>{
+      if(!hasCoords || !Number.isFinite(s.lat) || !Number.isFinite(s.lon)) return !hasCoords;
+      const dy=(b.lat-s.lat)*111200;
+      const dx=(b.lon-s.lon)*111200*Math.cos(b.lat*Math.PI/180);
+      return Math.hypot(dx,dy)<=250;
+    });
+    if(!site){
+      const key=clusters.length?`${identifier}#${clusters.length+1}`:identifier;
+      site={key,ccts:[],lat:b.lat,lon:b.lon,alcaldia:b.alcaldia};
+      clusters.push(site); siteByKey.set(key,site);
+    }
+    site.ccts.push(b);
   });
   visibleSites=[...siteByKey.values()];
 }
@@ -289,7 +299,7 @@ function siteMetricInfo(site){
 function displayedValue(info){ return info.value; }
 function legendCategories(){
   return [
-    {id:'cero',label:'0 niñas (os)',color:'#94a3b8',border:'#64748b',test:i=>i.value===0},
+    {id:'cero',label:'0 o sin registro',color:'#94a3b8',border:'#64748b',test:i=>i.value===0},
     {id:'q1',label:'1 niña (o)',color:'#dbeafe',border:'#2563eb',test:i=>i.value===1},
     {id:'q25',label:'2–5 niñas (os)',color:'#7dd3fc',border:'#0369a1',test:i=>i.value>=2&&i.value<=5},
     {id:'q610',label:'6–10 niñas (os)',color:'#38bdf8',border:'#075985',test:i=>i.value>=6&&i.value<=10},
@@ -388,21 +398,22 @@ function detailHtml(b){
   const siAll=sourceRowsFor(b.cct,'siieweb',turno);
   const si=siAll.filter(r=>!r.fallback_matricula);
   const s911=sourceRowsFor(b.cct,'911',turno);
-  const siTotal=si.length?si.reduce((s,r)=>s+(n(r.total_pertenecientes)||0),0):0;
+  const siTotal=si.length?si.reduce((s,r)=>s+(n(r.total_pertenecientes)||0),0):null;
   const siMatVals=siAll.map(r=>n(r.matricula)).filter(v=>v!==null); const siMat=siMatVals.length?siMatVals.reduce((a,b)=>a+b,0):null;
   const groupTotals=new Map(); si.forEach(r=>Object.entries(r.grupos||{}).forEach(([g,v])=>groupTotals.set(g,(groupTotals.get(g)||0)+(n(v)||0))));
   const groups=[...groupTotals.entries()].filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
-  const h=s911.length?s911.reduce((s,r)=>s+(n(r.hombres)||0),0):0;
-  const m=s911.length?s911.reduce((s,r)=>s+(n(r.mujeres)||0),0):0;
-  const t=s911.length?s911.reduce((s,r)=>s+(n(r.total)||0),0):0;
+  const h=s911.length?s911.reduce((s,r)=>s+(n(r.hombres)||0),0):null;
+  const m=s911.length?s911.reduce((s,r)=>s+(n(r.mujeres)||0),0):null;
+  const t=s911.length?s911.reduce((s,r)=>s+(n(r.total)||0),0):null;
   return `
     <section class="info-card"><h3>General</h3><div class="detail-grid">
       ${detailCell('CCT',b.cct)}${detailCell('Nombre',b.nombre)}${detailCell('Nivel',b.nivel)}${detailCell('Turno',(b.turnos||[]).join(' / ')||'Sin registro')}
       ${detailCell('Sostenimiento',b.sostenimiento)}${detailCell('Alcaldía',b.alcaldia)}${detailCell('Domicilio',b.domicilio||'Sin registro')}${detailCell('Localidad / colonia',b.localidad||b.colonia||'Sin registro')}
+      ${b.ubicacion_por_verificar?detailCell('Ubicación por verificar',b.observacion_ubicacion||'Coordenada pendiente de comprobación'):''}
     </div></section>
     <section class="info-card"><h3>Número de niñas (os) pertenecientes a un grupo indígena por CCT (SIIEWEB)</h3>
       <div class="detail-grid">${detailCell('Total pertenecientes',fmt(siTotal))}${detailCell('Matrícula total (SIIEWEB)',fmt(siMat))}${detailCell('Turno consultado',turno||'Todos')}</div>
-      <div class="group-list" style="margin-top:9px">${groups.length?groups.map(([g,v])=>`<span class="group-tag">${esc(g)}: ${v.toLocaleString('es-MX')}</span>`).join(''):'<span class="muted-box">0 niñas (os) reportados.</span>'}</div>
+      <div class="group-list" style="margin-top:9px">${groups.length?groups.map(([g,v])=>`<span class="group-tag">${esc(g)}: ${v.toLocaleString('es-MX')}</span>`).join(''):`<span class="muted-box">${si.length?'0 niñas (os) reportados.':'Sin registro en esta fuente.'}</span>`}</div>
       <p class="source-note">Fuente: SIIEWEB, actualización del 17 de julio de 2026.</p>
     </section>
     <section class="info-card"><h3>Número de niñas (os) indígenas o hablantes de alguna lengua indígena (Estadística 911)</h3>
@@ -411,15 +422,6 @@ function detailHtml(b){
     </section>`;
 }
 function detailCell(label,value){return `<div><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`}
-
-function countOfficialInmuebles(ccts){
-  const wanted=new Set((ccts||[]).map(b=>typeof b==='string'?b:b.cct).filter(Boolean));
-  if(!officialInmuebles.length) return effectiveSites().filter(s=>Number.isFinite(s.lat)&&Number.isFinite(s.lon)).length;
-  return officialInmuebles.filter(inmueble=>
-    !/^(COORD-|PROGRAMA-|base-cct-)/i.test(String(inmueble.id||'')) &&
-    (inmueble.ccts||[]).some(cct=>wanted.has(cct))
-  ).length;
-}
 
 function updateStats(){
   const source=$('fuenteIndicador').value;
@@ -438,7 +440,7 @@ function updateStats(){
   $('kpiIndicador').textContent=metric.toLocaleString('es-MX');
   $('kpiMatricula').textContent=matricula.toLocaleString('es-MX');
   const withCoords=effectiveSites().filter(s=>Number.isFinite(s.lat)&&Number.isFinite(s.lon)).reduce((sum,s)=>sum+s.ccts.length,0);
-  let note=`${withCoords.toLocaleString('es-MX')} CCT visibles en mapa; ${(rows.length-withCoords).toLocaleString('es-MX')} sin coordenadas.`;
+  let note=`${withCoords.toLocaleString('es-MX')} CCT visibles en mapa; ${(rows.length-withCoords).toLocaleString('es-MX')} sin coordenadas. Los puntos mostrados no equivalen necesariamente a inmuebles físicos.`;
   if(legendSelection.size) note+=` Rangos activos: ${legendSelection.size}.`;
   if(source==='siieweb'){
     const top=topGroup(rows,$('filtroTurno').value);
@@ -466,9 +468,9 @@ function renderRangeSelector(){
 function renderLegend(){
   const source=$('fuenteIndicador').value;
   const group=$('grupoIndigena').value;
-  $('legendTitle').textContent=source==='siieweb'?(group?`${group} (SIIEWEB)`:'Pertenencia a grupo indígena (SIIEWEB)'):'Niños indígenas / hablantes (Estadística 911)';
+  $('legendTitle').textContent=source==='siieweb'?(group?`${group} (SIIEWEB)`:'Pertenencia a grupo indígena (SIIEWEB)'):'Niñas (os) indígenas / hablantes (Estadística 911)';
   const cats=legendCategories();
-  $('legendBody').innerHTML=`<div class="legend-help">La simbología representa el número de estudiantes para el indicador seleccionado; los CCT sin registro se muestran como 0.</div>`+
+  $('legendBody').innerHTML=`<div class="legend-help">La simbología representa el número de estudiantes para el indicador seleccionado; los CCT sin registro comparten categoría visual con los reportados en cero; no significa que el dato ausente sea cero.</div>`+
     cats.map(c=>`<div class="legend-row"><span class="legend-dot" style="background:${c.color};border-color:${c.border}"></span><span>${c.label}</span></div>`).join('')+
     `<div class="legend-scale-note">El tamaño del punto aumenta con la cantidad de estudiantes.</div>`;
 }

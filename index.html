@@ -6,14 +6,14 @@
   <meta name="description" content="Visor de niñas (os) pertenecientes a grupos indígenas y hablantes de lengua indígena en planteles educativos de la Ciudad de México.">
   <title>Visor de población indígena en planteles educativos</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="style.css?v=20261006-4">
+  <link rel="stylesheet" href="style.css?v=20261105-auditoria">
 </head>
 <body>
 <header class="topbar">
   <div class="brand-block">
     <span class="eyebrow">Sistema de información geográfica</span>
     <h1>Visor de población indígena en planteles educativos</h1>
-    <p>Número de niñas (os) pertenecientes a un grupo indígena por CCT (SIIEWEB) y número de niños indígenas o hablantes de alguna lengua indígena (Estadística 911).</p>
+    <p>Número de niñas (os) pertenecientes a un grupo indígena por CCT (SIIEWEB) y número de niñas (os) indígenas o hablantes de alguna lengua indígena (Estadística 911).</p>
   </div>
   <nav><a href="estadisticas.html">Estadísticas generales</a></nav>
 </header>
@@ -30,7 +30,7 @@
       <label for="fuenteIndicador">Fuente / indicador</label>
       <select id="fuenteIndicador">
         <option value="siieweb">Pertenencia a grupo indígena (SIIEWEB)</option>
-        <option value="911">Niños indígenas o hablantes de lengua indígena (Estadística 911)</option>
+        <option value="911">Niñas (os) indígenas o hablantes de lengua indígena (Estadística 911)</option>
       </select>
       <label for="grupoIndigena">Grupo indígena (SIIEWEB)</label>
       <select id="grupoIndigena"><option value="">Todos los grupos</option></select>
@@ -64,7 +64,7 @@
         <option value="">Todos</option>
         <option value="casos">Con casos (&gt; 0)</option>
         <option value="registro">Con registro</option>
-        <option value="cero">Cero</option>
+        <option value="cero">Cero o sin registro</option>
       </select>
       <label for="buscar">Buscar CCT o nombre</label>
       <input id="buscar" type="search" placeholder="Ej. 09DPR... o nombre del plantel">
@@ -75,7 +75,7 @@
       <h2>Resumen visible</h2>
       <div class="kpis">
         <div><strong id="kpiCct">0</strong><span>CCT</span></div>
-        <div><strong id="kpiPlanteles">0</strong><span>Inmuebles visibles</span></div>
+        <div><strong id="kpiPlanteles">0</strong><span>Puntos en el mapa</span></div>
         <div><strong id="kpiIndicador">0</strong><span id="kpiIndicadorLabel">niñas (os) (SIIEWEB)</span></div>
         <div><strong id="kpiMatricula">0</strong><span>Matrícula SIIEWEB</span></div>
       </div>
@@ -112,6 +112,6 @@
 </main>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="script.js?v=20261006-4"></script>
+<script src="script.js?v=20261105-auditoria"></script>
 </body>
 </html>
