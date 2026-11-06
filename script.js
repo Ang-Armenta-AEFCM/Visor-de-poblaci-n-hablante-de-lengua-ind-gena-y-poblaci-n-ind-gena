@@ -98,6 +98,15 @@ async function init(){
 document.addEventListener('DOMContentLoaded',init);
 
 function bindUI(){
+  $('mostrarPlanteles').addEventListener('change',()=>{
+    if($('mostrarPlanteles').checked){
+      schoolLayer.addTo(map);
+    }else{
+      map.removeLayer(schoolLayer);
+      map.closePopup();
+      closeDetail();
+    }
+  });
   $('fuenteIndicador').addEventListener('change',()=>{
     legendSelection.clear();
     syncSourceUI();
@@ -160,7 +169,7 @@ function syncSourceUI(){
     if(o.value==='cero') o.disabled=groupActive;
   });
   if(groupActive && $('filtroEstado').value==='cero') $('filtroEstado').value='casos';
-  $('kpiIndicadorLabel').textContent=isSi?'Pertenecientes (SIIEWEB)':'Niñas (os) indígenas / hablantes (911)';
+  $('kpiIndicadorLabel').textContent=isSi?'Pertenecientes (SIIEWEB)':'Niñas(os) indígenas / hablantes (911)';
 }
 
 function sourceRowsFor(cct,source,turno){
@@ -300,11 +309,11 @@ function displayedValue(info){ return info.value; }
 function legendCategories(){
   return [
     {id:'cero',label:'0 o sin registro',color:'#94a3b8',border:'#64748b',test:i=>i.value===0},
-    {id:'q1',label:'1 niña (o)',color:'#dbeafe',border:'#2563eb',test:i=>i.value===1},
-    {id:'q25',label:'2–5 niñas (os)',color:'#7dd3fc',border:'#0369a1',test:i=>i.value>=2&&i.value<=5},
-    {id:'q610',label:'6–10 niñas (os)',color:'#38bdf8',border:'#075985',test:i=>i.value>=6&&i.value<=10},
-    {id:'q1125',label:'11–25 niñas (os)',color:'#0284c7',border:'#0c4a6e',test:i=>i.value>=11&&i.value<=25},
-    {id:'qgt25',label:'Más de 25 niñas (os)',color:'#4c1d95',border:'#2e1065',test:i=>i.value>25}
+    {id:'q1',label:'1 niña(o)',color:'#dbeafe',border:'#2563eb',test:i=>i.value===1},
+    {id:'q25',label:'2–5 niñas(os)',color:'#7dd3fc',border:'#0369a1',test:i=>i.value>=2&&i.value<=5},
+    {id:'q610',label:'6–10 niñas(os)',color:'#38bdf8',border:'#075985',test:i=>i.value>=6&&i.value<=10},
+    {id:'q1125',label:'11–25 niñas(os)',color:'#0284c7',border:'#0c4a6e',test:i=>i.value>=11&&i.value<=25},
+    {id:'qgt25',label:'Más de 25 niñas(os)',color:'#4c1d95',border:'#2e1065',test:i=>i.value>25}
   ];
 }
 function legendCategoryForInfo(info){
@@ -351,7 +360,7 @@ function buildPopup(site){
   const source=$('fuenteIndicador').value;
   const group=$('grupoIndigena').value;
   const info=siteMetricInfo(site); const val=info.value; const mat=info.matricula;
-  const metricLabel=source==='siieweb'?(group?`${group} (SIIEWEB)`:'Número de niñas (os) pertenecientes a un grupo indígena por CCT (SIIEWEB)'):'Número de niñas (os) indígenas o hablantes de alguna lengua indígena (Estadística 911)';
+  const metricLabel=source==='siieweb'?(group?`${group} (SIIEWEB)`:'Número de niñas(os) pertenecientes a un grupo indígena por CCT (SIIEWEB)'):'Número de niñas(os) indígenas o hablantes de alguna lengua indígena (Estadística 911)';
   return `<div class="school-popup">
     <h3>${esc(first.nombre)}${site.ccts.length>1?` <small>+${site.ccts.length-1} CCT</small>`:''}</h3>
     <div class="popup-meta">${esc(first.alcaldia)} · ${esc(first.nivel)}<br>${site.ccts.map(x=>esc(x.cct)).join(' · ')}</div>
@@ -411,12 +420,12 @@ function detailHtml(b){
       ${detailCell('Sostenimiento',b.sostenimiento)}${detailCell('Alcaldía',b.alcaldia)}${detailCell('Domicilio',b.domicilio||'Sin registro')}${detailCell('Localidad / colonia',b.localidad||b.colonia||'Sin registro')}
       ${b.ubicacion_por_verificar?detailCell('Ubicación por verificar',b.observacion_ubicacion||'Coordenada pendiente de comprobación'):''}
     </div></section>
-    <section class="info-card"><h3>Número de niñas (os) pertenecientes a un grupo indígena por CCT (SIIEWEB)</h3>
+    <section class="info-card"><h3>Número de niñas(os) pertenecientes a un grupo indígena por CCT (SIIEWEB)</h3>
       <div class="detail-grid">${detailCell('Total pertenecientes',fmt(siTotal))}${detailCell('Matrícula total (SIIEWEB)',fmt(siMat))}${detailCell('Turno consultado',turno||'Todos')}</div>
-      <div class="group-list" style="margin-top:9px">${groups.length?groups.map(([g,v])=>`<span class="group-tag">${esc(g)}: ${v.toLocaleString('es-MX')}</span>`).join(''):`<span class="muted-box">${si.length?'0 niñas (os) reportados.':'Sin registro en esta fuente.'}</span>`}</div>
+      <div class="group-list" style="margin-top:9px">${groups.length?groups.map(([g,v])=>`<span class="group-tag">${esc(g)}: ${v.toLocaleString('es-MX')}</span>`).join(''):`<span class="muted-box">${si.length?'0 niñas(os) reportados.':'Sin registro en esta fuente.'}</span>`}</div>
       <p class="source-note">Fuente: SIIEWEB, actualización del 17 de julio de 2026.</p>
     </section>
-    <section class="info-card"><h3>Número de niñas (os) indígenas o hablantes de alguna lengua indígena (Estadística 911)</h3>
+    <section class="info-card"><h3>Número de niñas(os) indígenas o hablantes de alguna lengua indígena (Estadística 911)</h3>
       <div class="detail-grid">${detailCell('Hombres',fmt(h))}${detailCell('Mujeres',fmt(m))}${detailCell('Total',fmt(t))}${detailCell('Turno consultado',turno||'Todos')}</div>
       <p class="source-note">Fuente: Estadística 911. Solo preescolar, primaria y secundaria.</p>
     </section>`;
@@ -468,7 +477,7 @@ function renderRangeSelector(){
 function renderLegend(){
   const source=$('fuenteIndicador').value;
   const group=$('grupoIndigena').value;
-  $('legendTitle').textContent=source==='siieweb'?(group?`${group} (SIIEWEB)`:'Pertenencia a grupo indígena (SIIEWEB)'):'Niñas (os) indígenas / hablantes (Estadística 911)';
+  $('legendTitle').textContent=source==='siieweb'?(group?`${group} (SIIEWEB)`:'Pertenencia a grupo indígena (SIIEWEB)'):'Niñas(os) indígenas / hablantes (Estadística 911)';
   const cats=legendCategories();
   $('legendBody').innerHTML=`<div class="legend-help">La simbología representa el número de estudiantes para el indicador seleccionado; los CCT sin registro comparten categoría visual con los reportados en cero; no significa que el dato ausente sea cero.</div>`+
     cats.map(c=>`<div class="legend-row"><span class="legend-dot" style="background:${c.color};border-color:${c.border}"></span><span>${c.label}</span></div>`).join('')+

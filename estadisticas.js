@@ -3,7 +3,7 @@ const fmt=v=>Number(v||0).toLocaleString('es-MX');
 Promise.all(Object.values(DATA).map(p=>fetch(p,{cache:'no-store'}).then(r=>r.json()))).then(([base,si,s911])=>{
  const meta=base.meta||{}, rows=base.registros||[]; const baseMap=new Map(rows.map(r=>[r.cct,r]));
  document.getElementById('statsKpis').innerHTML=[
-  ['CCT universo',meta.universo_cct],['CCT con coordenadas',meta.cct_con_coordenadas],['Pertenecientes (SIIEWEB)',meta.total_pertenecientes_siieweb],['Niñas (os) indígenas / hablantes (911)',meta.total_911]
+  ['CCT universo',meta.universo_cct],['CCT con coordenadas',meta.cct_con_coordenadas],['Pertenecientes (SIIEWEB)',meta.total_pertenecientes_siieweb],['Niñas(os) indígenas / hablantes (911)',meta.total_911]
  ].map(([l,v])=>`<div class="card"><strong>${fmt(v)}</strong><span>${l}</span></div>`).join('');
  const gt=new Map(); (si.registros||[]).forEach(r=>Object.entries(r.grupos||{}).forEach(([g,v])=>gt.set(g,(gt.get(g)||0)+Number(v||0))));
  const top=[...gt.entries()].sort((a,b)=>b[1]-a[1]).slice(0,15), max=top[0]?.[1]||1;
